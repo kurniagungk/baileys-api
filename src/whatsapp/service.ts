@@ -83,7 +83,7 @@ class WhatsappService {
 					prisma.session.deleteMany({ where: { sessionId } }),
 				]);
 				logger.info({ session: sessionId }, "Session destroyed");
-			} catch (e) {
+			} catch (e: any) {
 				logger.error(e, "An error occurred during session destroy");
 			} finally {
 				WhatsappService.sessions.delete(sessionId);
@@ -130,7 +130,7 @@ class WhatsappService {
 						emitEvent("qrcode.updated", sessionId, { qr });
 						res.status(200).json({ qr });
 						return;
-					} catch (e) {
+					} catch (e: any) {
 						logger.error(e, "An error occurred during QR generation");
 						emitEvent(
 							"qrcode.updated",
@@ -152,7 +152,7 @@ class WhatsappService {
 				try {
 					WhatsappService.updateWaConnection(sessionId, WAStatus.WaitQrcodeAuth);
 					qr = await toDataURL(connectionState.qr);
-				} catch (e) {
+				} catch (e: any) {
 					logger.error(e, "An error occurred during QR generation");
 					emitEvent(
 						"qrcode.updated",
@@ -196,7 +196,7 @@ class WhatsappService {
 				creds: state.creds,
 				keys: makeCacheableSignalKeyStore(state.keys, logger),
 			},
-			version: [2, 3000, 1015901307],
+			version: [2,3000,1023223821],
 			logger,
 			shouldIgnoreJid: (jid) => isJidBroadcast(jid),
 			getMessage: async (key) => {
@@ -258,7 +258,7 @@ class WhatsappService {
 
 	static getSessionStatus(session: Session) {
 		const state = ["CONNECTING", "CONNECTED", "DISCONNECTING", "DISCONNECTED"];
-		let status = state[(session.ws as WebSocketType).readyState];
+		let status = state[(session.ws as unknown as WebSocketType).readyState]; // Fixed line
 		status = session.user ? "AUTHENTICATED" : status;
 		return session.waStatus !== WAStatus.Unknown ? session.waStatus : status.toLowerCase();
 	}
@@ -286,7 +286,7 @@ class WhatsappService {
 		try {
 			if (type === "number") {
 				const [result] = await session.onWhatsApp(jid);
-				if(result?.exists) {
+				if (result?.exists) {
 					return result.jid;
 				} else {
 					return null;
@@ -294,12 +294,12 @@ class WhatsappService {
 			}
 
 			const groupMeta = await session.groupMetadata(jid);
-			if(groupMeta.id) {
+			if (groupMeta.id) {
 				return groupMeta.id;
 			} else {
 				return null;
 			}
-		} catch (e) {
+		} catch (e: any) {
 			return null;
 		}
 	}
