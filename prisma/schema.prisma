@@ -57,6 +57,7 @@ model Chat {
   wallpaper                 Json?
   lastMessageRecvTimestamp  Int?
   commentsCount             Int?
+  locked                    Boolean? 
 
   @@unique([sessionId, id], map: "unique_id_per_session_id_1")
   @@index([sessionId])
@@ -157,6 +158,9 @@ model Message {
   reportingTokenInfo              Json?
   isMentionedInStatus             Boolean?
   statusMentions                  Json?
+  messageAddOns                   Json?
+  statusMentionSources            Json?
+  supportAiCitations              Json?
 
   @@unique([sessionId, remoteJid, id], map: "unique_message_key_per_session_id")
   @@index([sessionId])
