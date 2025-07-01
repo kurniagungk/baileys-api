@@ -156,6 +156,7 @@ model Message {
   pinInChat                       Json?
   reportingTokenInfo              Json?
   isMentionedInStatus             Boolean?
+  statusMentions                  Json?
 
   @@unique([sessionId, remoteJid, id], map: "unique_message_key_per_session_id")
   @@index([sessionId])
