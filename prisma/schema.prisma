@@ -155,6 +155,7 @@ model Message {
   eventResponses                  Json?
   pinInChat                       Json?
   reportingTokenInfo              Json?
+  isMentionedInStatus             Boolean?
 
   @@unique([sessionId, remoteJid, id], map: "unique_message_key_per_session_id")
   @@index([sessionId])
