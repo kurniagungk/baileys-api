@@ -172,6 +172,6 @@ model Session {
   id        String @db.VarChar(255)
   data      String @db.Text
 
-  @@unique([sessionId, id], map: "unique_id_per_session_id_4")
+  @@unique([sessionId, id], name: "sessionId_id", map: "unique_id_per_session_id_4")
   @@index([sessionId])
 }
