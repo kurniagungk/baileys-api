@@ -2,6 +2,7 @@ import makeWASocket, {
 	DisconnectReason,
 	isJidBroadcast,
 	makeCacheableSignalKeyStore,
+	fetchLatestBaileysVersion
 } from "baileys";
 import type { ConnectionState, SocketConfig, WASocket, proto } from "baileys";
 import { Store, useSession } from "./store";
@@ -38,6 +39,10 @@ class WhatsappService {
 	}
 
 	private async init() {
+
+		const { version, isLatest } = await fetchLatestBaileysVersion()
+		console.log(`using WA v${version.join('.')}, isLatest: ${isLatest}`)
+
 		const storedSessions = await prisma.session.findMany({
 			select: { sessionId: true, data: true },
 			where: { id: { startsWith: env.SESSION_CONFIG_ID } },
@@ -187,6 +192,9 @@ class WhatsappService {
 			? handleSSEConnectionUpdate
 			: handleNormalConnectionUpdate;
 		const { state, saveCreds } = await useSession(sessionId);
+		const { version } = await fetchLatestBaileysVersion();
+
+
 		const socket = makeWASocket({
 			printQRInTerminal: true,
 			browser: [env.BOT_NAME || "Whatsapp Bot", "Chrome", "3.0"],
@@ -196,7 +204,7 @@ class WhatsappService {
 				creds: state.creds,
 				keys: makeCacheableSignalKeyStore(state.keys, logger),
 			},
-			version: [2,3000,1023223821],
+			version,
 			logger,
 			shouldIgnoreJid: (jid) => isJidBroadcast(jid),
 			getMessage: async (key) => {
