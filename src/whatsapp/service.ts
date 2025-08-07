@@ -34,14 +34,20 @@ class WhatsappService {
 	private static retries = new Map<string, number>();
 	private static SSEQRGenerations = new Map<string, number>();
 
+	private static whatsappVersion: { version: [number, number, number], isLatest: boolean } | null = null;
+
+
 	constructor() {
 		this.init();
 	}
 
 	private async init() {
+		if (!WhatsappService.whatsappVersion) {
+			WhatsappService.whatsappVersion = await fetchLatestBaileysVersion();
+		}
 
-		const { version, isLatest } = await fetchLatestBaileysVersion()
-		console.log(`using WA v${version.join('.')}, isLatest: ${isLatest}`)
+		const { version, isLatest } = WhatsappService.whatsappVersion;
+		console.log(`using WA v${version.join('.')}, isLatest: ${isLatest}`);
 
 		const storedSessions = await prisma.session.findMany({
 			select: { sessionId: true, data: true },
@@ -192,7 +198,7 @@ class WhatsappService {
 			? handleSSEConnectionUpdate
 			: handleNormalConnectionUpdate;
 		const { state, saveCreds } = await useSession(sessionId);
-		const { version } = await fetchLatestBaileysVersion();
+		const { version } = WhatsappService.whatsappVersion;
 
 
 		const socket = makeWASocket({
