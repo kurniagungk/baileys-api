@@ -5,47 +5,81 @@ import { prisma } from "@/config/database";
 import WhatsappService from "@/whatsapp/service";
 import { Prisma } from "@prisma/client";
 
+interface ContactRaw {
+	pkId: number;
+	sessionId: string;
+	id: string;
+	name?: string | null;
+	notify?: string | null;
+	verifiedName?: string | null;
+	imgUrl?: string | null;
+	status?: string | null;
+	unreadCount?: number | null;
+}
+
 export const list: RequestHandler = async (req, res) => {
 	try {
 		const { sessionId } = req.params;
 		const { cursor = undefined, limit = 25, search } = req.query;
-		// Create whereConditions
-		const whereConditions: Prisma.ContactWhereInput = {
-			id: { endsWith: "s.whatsapp.net" },
-			sessionId,
-		};
-		// Add  OR condition if only search parameter is exist
+
+		const limitNumber = Number(limit);
+		const cursorNumber = cursor ? Number(cursor) : null;
+
+		const conditions = ["c.sessionId = ?", "c.id LIKE '%@s.whatsapp.net'"];
+		const params: any[] = [sessionId];
+
 		if (search) {
-			whereConditions.OR = [
-				{
-					name: {
-						contains: String(search),
-					},
-				},
-				{
-					verifiedName: {
-						contains: String(search),
-					},
-				},
-				{
-					notify: {
-						contains: String(search),
-					},
-				},
-			];
+			// Kalau ada search, tambahkan kondisi search, tapi *jangan* tambahkan lidJid IS NOT NULL
+			conditions.push("(c.name LIKE ? OR c.verifiedName LIKE ? OR c.notify LIKE ?)");
+			const searchTerm = `%${search}%`;
+			params.push(searchTerm, searchTerm, searchTerm);
+		} else {
+			// Kalau tidak ada search, tambahkan kondisi lidJid IS NOT NULL
+			conditions.push("lidJid IS NOT NULL");
 		}
-		const contacts = await prisma.contact.findMany({
-			cursor: cursor ? { pkId: Number(cursor) } : undefined,
-			take: Number(limit),
-			skip: cursor ? 1 : 0,
-			where: whereConditions,
-		});
+
+		if (cursorNumber) {
+			conditions.push("c.pkId > ?");
+			params.push(cursorNumber);
+		}
+
+		params.push(limitNumber);
+
+		const whereClause = `WHERE ${conditions.join(" AND ")}`;
+
+		const rawQuery = `
+			SELECT 
+				c.pkId, 
+				c.sessionId, 
+				c.id, 
+				c.name, 
+				c.notify, 
+				c.verifiedName, 
+				c.imgUrl, 
+				c.status,
+				m.unreadCount
+			FROM Contact c
+			LEFT JOIN Chat m ON c.id = m.id AND c.sessionId = m.sessionId
+			${whereClause}
+			GROUP BY c.pkId, c.sessionId, c.id, c.name, c.notify, c.verifiedName, c.imgUrl, c.status, m.unreadCount
+			ORDER BY m.conversationTimestamp DESC
+			LIMIT ?
+			`;
+
+		const contacts = await prisma.$queryRawUnsafe<ContactRaw[]>(rawQuery, ...params);
+
+		const contactsSafe = contacts.map((c) => ({
+			...c,
+			pkId: c.pkId.toString(),
+			unreadCount: c.unreadCount ?? 0,
+		}));
+
+		const lastCursor =
+			contacts.length === limitNumber ? contacts[contacts.length - 1].pkId.toString() : null;
+
 		res.status(200).json({
-			data: contacts,
-			cursor:
-				contacts.length !== 0 && contacts.length === Number(limit)
-					? contacts[contacts.length - 1].pkId
-					: null,
+			data: contactsSafe,
+			cursor: lastCursor,
 		});
 	} catch (e) {
 		const message = "An error occurred during contact list";

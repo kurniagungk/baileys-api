@@ -1,7 +1,7 @@
 import type { BaileysEventEmitter, MessageUserReceipt, proto, WAMessageKey } from "baileys";
 import { jidNormalizedUser, toNumber } from "baileys";
 import type { BaileysEventHandler, MakeTransformedPrisma } from "@/types";
-import { transformPrisma, logger, emitEvent } from "@/utils";
+import { transformPrisma, logger, emitEvent, resetUnreadCount } from "@/utils";
 import { prisma } from "@/config/database";
 import type { Message } from "@prisma/client";
 
@@ -96,6 +96,7 @@ export default function messageHandler(sessionId: string, event: BaileysEventEmi
 	};
 
 	const update: BaileysEventHandler<"messages.update"> = async (updates) => {
+		console.log("messages.update", updates);
 		for (const { update, key } of updates) {
 			try {
 				await prisma.$transaction(async (tx) => {
@@ -128,6 +129,10 @@ export default function messageHandler(sessionId: string, event: BaileysEventEmi
 						select: { pkId: true },
 						data: processedMessage,
 					});
+
+					// Gunakan utilitas agar tidak duplikat kode
+					await resetUnreadCount(sessionId, data.key.remoteJid!);
+
 					emitEvent("messages.update", sessionId, { messages: processedMessage });
 				});
 			} catch (e: any) {
@@ -169,6 +174,8 @@ export default function messageHandler(sessionId: string, event: BaileysEventEmi
 	};
 
 	const updateReceipt: BaileysEventHandler<"message-receipt.update"> = async (updates) => {
+		console.log("message-receipt.update", updates);
+
 		for (const { key, receipt } of updates) {
 			try {
 				await prisma.$transaction(async (tx) => {

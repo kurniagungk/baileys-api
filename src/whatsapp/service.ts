@@ -1,8 +1,9 @@
+// Fungsi untuk login dengan pairing code
 import makeWASocket, {
 	DisconnectReason,
 	isJidBroadcast,
 	makeCacheableSignalKeyStore,
-	fetchLatestBaileysVersion
+	fetchLatestBaileysVersion,
 } from "baileys";
 import type { ConnectionState, SocketConfig, WASocket, proto } from "baileys";
 import { Store, useSession } from "./store";
@@ -27,6 +28,8 @@ type createSessionOptions = {
 	SSE?: boolean;
 	readIncomingMessages?: boolean;
 	socketConfig?: SocketConfig;
+	usePairingCode?: boolean;
+	phoneNumber?: string;
 };
 
 class WhatsappService {
@@ -34,8 +37,10 @@ class WhatsappService {
 	private static retries = new Map<string, number>();
 	private static SSEQRGenerations = new Map<string, number>();
 
-	private static whatsappVersion: { version: [number, number, number], isLatest: boolean } | null = null;
-
+	private static whatsappVersion: {
+		version: [number, number, number];
+		isLatest: boolean;
+	} | null = null;
 
 	constructor() {
 		this.init();
@@ -47,7 +52,7 @@ class WhatsappService {
 		}
 
 		const { version, isLatest } = WhatsappService.whatsappVersion;
-		console.log(`using WA v${version.join('.')}, isLatest: ${isLatest}`);
+		console.log(`using WA v${version.join(".")}, isLatest: ${isLatest}`);
 
 		const storedSessions = await prisma.session.findMany({
 			select: { sessionId: true, data: true },
@@ -79,7 +84,18 @@ class WhatsappService {
 	}
 
 	static async createSession(options: createSessionOptions) {
-		const { sessionId, res, SSE = false, readIncomingMessages = false, socketConfig } = options;
+		const {
+			sessionId,
+			res,
+			SSE = false,
+			readIncomingMessages = false,
+			socketConfig,
+			usePairingCode = false,
+			phoneNumber,
+		} = options;
+
+		console.log(options);
+
 		const configID = `${env.SESSION_CONFIG_ID}-${sessionId}`;
 		let connectionState: Partial<ConnectionState> = { connection: "close" };
 
@@ -200,26 +216,69 @@ class WhatsappService {
 		const { state, saveCreds } = await useSession(sessionId);
 		const { version } = WhatsappService.whatsappVersion;
 
-
-		const socket = makeWASocket({
-			printQRInTerminal: true,
-			browser: [env.BOT_NAME || "Whatsapp Bot", "Chrome", "3.0"],
-			generateHighQualityLinkPreview: true,
-			...socketConfig,
-			auth: {
-				creds: state.creds,
-				keys: makeCacheableSignalKeyStore(state.keys, logger),
-			},
-			version,
-			logger,
-			shouldIgnoreJid: (jid) => isJidBroadcast(jid),
-			getMessage: async (key) => {
-				const data = await prisma.message.findFirst({
-					where: { remoteJid: key.remoteJid!, id: key.id!, sessionId },
+		let socket: WASocket;
+		if (usePairingCode && phoneNumber) {
+			socket = makeWASocket({
+				printQRInTerminal: false,
+				browser: [env.BOT_NAME || "Whatsapp Bot", "Chrome", "3.0"],
+				generateHighQualityLinkPreview: true,
+				...socketConfig,
+				auth: {
+					creds: state.creds,
+					keys: makeCacheableSignalKeyStore(state.keys, logger),
+				},
+				version,
+				logger,
+				shouldIgnoreJid: (jid) => isJidBroadcast(jid),
+				getMessage: async (key) => {
+					const data = await prisma.message.findFirst({
+						where: { remoteJid: key.remoteJid!, id: key.id!, sessionId },
+					});
+					return (data?.message || undefined) as proto.IMessage | undefined;
+				},
+			});
+			if (!socket.authState.creds.registered) {
+				let sent = false;
+				socket.ev.on("connection.update", async (update) => {
+					if (!sent && update.qr) {
+						sent = true;
+						const code = await socket.requestPairingCode(phoneNumber);
+						if (res && !res.headersSent) {
+							res.status(200).json({ pairingCode: code });
+						}
+					}
 				});
-				return (data?.message || undefined) as proto.IMessage | undefined;
-			},
-		});
+				// Jangan jalankan handler QR sama sekali
+				return;
+			} else {
+				if (res && !res.headersSent) {
+					res.status(400).json({ error: "Session already registered" });
+				}
+				return;
+			}
+		} else {
+			socket = makeWASocket({
+				printQRInTerminal: true,
+				browser: [env.BOT_NAME || "Whatsapp Bot", "Chrome", "3.0"],
+				generateHighQualityLinkPreview: true,
+				...socketConfig,
+				auth: {
+					creds: state.creds,
+					keys: makeCacheableSignalKeyStore(state.keys, logger),
+				},
+				version,
+				logger,
+				shouldIgnoreJid: (jid) => isJidBroadcast(jid),
+				getMessage: async (key) => {
+					const data = await prisma.message.findFirst({
+						where: { remoteJid: key.remoteJid!, id: key.id!, sessionId },
+					});
+					return (data?.message || undefined) as proto.IMessage | undefined;
+				},
+			});
+			// Pastikan event handler QR aktif pada mode QR
+			socket.ev.on("connection.update", handleNormalConnectionUpdate);
+		}
 
 		const store = new Store(sessionId, socket.ev);
 
@@ -246,7 +305,6 @@ class WhatsappService {
 			if (connection === "close") handleConnectionClose();
 			if (connection === "connecting")
 				WhatsappService.updateWaConnection(sessionId, WAStatus.PullingWAData);
-			handleConnectionUpdate();
 		});
 
 		if (readIncomingMessages) {
@@ -321,6 +379,24 @@ class WhatsappService {
 	static async jidExists(session: Session, jid: string, type: "group" | "number" = "number") {
 		const validJid = await this.validJid(session, jid, type);
 		return !!validJid;
+	}
+	// Fungsi untuk login dengan pairing code
+	static async usePairingCode(sessionId: string, phoneNumber: string): Promise<string> {
+		const { state, saveCreds } = await useSession(sessionId);
+		const socket = makeWASocket({
+			printQRInTerminal: false,
+			auth: {
+				creds: state.creds,
+				keys: makeCacheableSignalKeyStore(state.keys, logger),
+			},
+		});
+		if (!socket.authState.creds.registered) {
+			// Nomor harus tanpa +, (), atau -
+			const code = await socket.requestPairingCode(phoneNumber);
+			return code;
+		} else {
+			throw new Error("Session already registered");
+		}
 	}
 }
 

@@ -3,6 +3,7 @@ import type { BaileysEventHandler } from "@/types";
 import { transformPrisma, logger, emitEvent } from "@/utils";
 import { prisma } from "@/config/database";
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
+import WhatsappService from "@/whatsapp/service";
 
 export default function contactHandler(sessionId: string, event: BaileysEventEmitter) {
 	const model = prisma.contact;
@@ -17,8 +18,44 @@ export default function contactHandler(sessionId: string, event: BaileysEventEmi
 			// 		where: { id: { notIn: contactIds }, sessionId },
 			// 	})
 			// ).map((c) => c.id);
+			const session = WhatsappService.getSession(sessionId)!;
 
-			const processedContacts = contacts.map((c) => transformPrisma(c));
+			const processedContacts = await Promise.all(
+				contacts.map(async (contact) => {
+					const transformed = transformPrisma(contact, false);
+
+					// Pastikan properti imgUrl ada, kalau belum ada buat default null
+					if (!("imgUrl" in transformed)) {
+						transformed.imgUrl = null;
+					}
+
+					if (typeof transformed.imgUrl !== "undefined") {
+						// cek dulu apakah JID ada
+						const exists = await WhatsappService.jidExists(
+							session,
+							transformed.id!,
+							"number",
+						); // "user" atau tipe yang sesuai
+
+						if (!exists) {
+							transformed.imgUrl = null;
+						} else {
+							// kalau ada, ambil URL foto profil
+							const url = await session
+								.profilePictureUrl(transformed.id!)
+								.catch(() => null);
+							transformed.imgUrl = url;
+	
+						}
+					}
+
+
+					return transformed;
+				}),
+			);
+
+			logger.info(processedContacts[0], "Upsert promises");
+
 			const upsertPromises = processedContacts.map((data) =>
 				model.upsert({
 					select: { pkId: true },
@@ -28,6 +65,8 @@ export default function contactHandler(sessionId: string, event: BaileysEventEmi
 				}),
 			);
 
+			logger.info(upsertPromises[0], "Upsert promises");
+
 			await Promise.any([
 				...upsertPromises,
 				//danger: contacts come with several patches of N contacts, deleting those that are not in this patch ends up deleting those received in the previous patch
@@ -35,14 +74,16 @@ export default function contactHandler(sessionId: string, event: BaileysEventEmi
 			]);
 			logger.info({ newContacts: contacts.length }, "Synced contacts");
 			emitEvent("contacts.set", sessionId, { contacts: processedContacts });
-		} catch (e: any) {
+		} catch (e: unknown) {
 			logger.error(e, "An error occured during contacts set");
 			emitEvent(
 				"contacts.set",
 				sessionId,
 				undefined,
 				"error",
-				`An error occured during contacts set: ${e.message}`,
+				`An error occured during contacts set: ${
+					e instanceof Error ? e.message : String(e)
+				}`,
 			);
 		}
 	};
