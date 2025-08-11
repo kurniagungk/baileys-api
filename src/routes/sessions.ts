@@ -9,7 +9,15 @@ const router = Router();
 router.get("/", apiKeyValidator, session.list);
 router.get("/:sessionId", apiKeyValidator, sessionValidator, session.find);
 router.get("/:sessionId/status", apiKeyValidator, sessionValidator, session.status);
-router.post("/add", body("sessionId").isString().notEmpty(), apiKeyValidator, requestValidator, session.add);
+router.post(
+	"/add",
+	body("sessionId").isString().notEmpty(),
+	body("pairingCode").optional().isBoolean().toBoolean(), // <-- tambahkan
+	body("phoneNumber").optional().isString(), // <-- tambahkan
+	apiKeyValidator,
+	requestValidator,
+	session.add,
+);
 router.get("/:sessionId/add-sse", apiKeyValidatorParam, session.addSSE);
 router.delete("/:sessionId", apiKeyValidator, sessionValidator, session.del);
 

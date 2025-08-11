@@ -14,11 +14,18 @@ export const status: RequestHandler = (req, res) => {
 };
 
 export const add: RequestHandler = async (req, res) => {
-	const { sessionId, readIncomingMessages, ...socketConfig } = req.body;
+	const { sessionId, pairingCode, phoneNumber, readIncomingMessages, ...socketConfig } = req.body;
 
 	if (WhatsappService.sessionExists(sessionId))
 		return res.status(400).json({ error: "Session already exists" });
-	WhatsappService.createSession({ sessionId, res, readIncomingMessages, socketConfig });
+	WhatsappService.createSession({
+		sessionId,
+		res,
+		pairingCode,
+		phoneNumber,
+		readIncomingMessages,
+		socketConfig,
+	});
 };
 
 export const addSSE: RequestHandler = async (req, res) => {

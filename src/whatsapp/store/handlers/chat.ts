@@ -50,7 +50,7 @@ export default function chatHandler(sessionId: string, event: BaileysEventEmitte
 	const upsert: BaileysEventHandler<"chats.upsert"> = async (chats) => {
 		try {
 			const results: MakeTransformedPrisma<Chat>[] = [];
-			console.log("Upserting chats", chats);
+			
 			await Promise.any(
 				chats
 					.map((c) => transformPrisma(c) as MakeTransformedPrisma<Chat>)
@@ -82,7 +82,6 @@ export default function chatHandler(sessionId: string, event: BaileysEventEmitte
 			try {
 				const data = transformPrisma(update) as MakeTransformedPrisma<Chat>;
 
-				console.log("Updating chat", data);
 
 				const existingChat = await model.findUnique({
 					where: { sessionId_id: { id: update.id!, sessionId } },

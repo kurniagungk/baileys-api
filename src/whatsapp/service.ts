@@ -2,7 +2,7 @@ import makeWASocket, {
 	DisconnectReason,
 	isJidBroadcast,
 	makeCacheableSignalKeyStore,
-	fetchLatestBaileysVersion
+	fetchLatestBaileysVersion,
 } from "baileys";
 import type { ConnectionState, SocketConfig, WASocket, proto } from "baileys";
 import { Store, useSession } from "./store";
@@ -25,6 +25,8 @@ type createSessionOptions = {
 	sessionId: string;
 	res?: Response;
 	SSE?: boolean;
+	pairingCode?: boolean;
+	phoneNumber?: string;
 	readIncomingMessages?: boolean;
 	socketConfig?: SocketConfig;
 };
@@ -34,8 +36,10 @@ class WhatsappService {
 	private static retries = new Map<string, number>();
 	private static SSEQRGenerations = new Map<string, number>();
 
-	private static whatsappVersion: { version: [number, number, number], isLatest: boolean } | null = null;
-
+	private static whatsappVersion: {
+		version: [number, number, number];
+		isLatest: boolean;
+	} | null = null;
 
 	constructor() {
 		this.init();
@@ -47,7 +51,7 @@ class WhatsappService {
 		}
 
 		const { version, isLatest } = WhatsappService.whatsappVersion;
-		console.log(`using WA v${version.join('.')}, isLatest: ${isLatest}`);
+	
 
 		const storedSessions = await prisma.session.findMany({
 			select: { sessionId: true, data: true },
@@ -79,7 +83,16 @@ class WhatsappService {
 	}
 
 	static async createSession(options: createSessionOptions) {
-		const { sessionId, res, SSE = false, readIncomingMessages = false, socketConfig } = options;
+		const {
+			sessionId,
+			res,
+			SSE = false,
+			readIncomingMessages = false,
+			socketConfig,
+			pairingCode = false,
+			phoneNumber,
+		} = options;
+
 		const configID = `${env.SESSION_CONFIG_ID}-${sessionId}`;
 		let connectionState: Partial<ConnectionState> = { connection: "close" };
 
@@ -157,6 +170,43 @@ class WhatsappService {
 			}
 		};
 
+		const handlePairingConnectionUpdate = async () => {
+	
+			if (pairingCode && connectionState.qr?.length) {
+				try {
+					// Jika phoneNumber tidak diberikan, throw error
+					if (!phoneNumber) {
+						if (res && !res.headersSent && !res.writableEnded) {
+							return res.status(400).json({
+								error: "phoneNumber is required when pairingCode is true",
+							});
+						}
+						return;
+					}
+
+					await delay(3000);
+
+					const phone = phoneNumber.replace(/\D/g, ""); // Hapus semua karakter selain digit
+					const code =
+						await WhatsappService.getSession(sessionId).requestPairingCode(phone); // Request pairing code
+
+					// Kirim pairing code sebagai response tanpa QR
+					if (res && !res.headersSent && !res.writableEnded) {
+						res.status(200).json({ pairingCode: code });
+					}
+
+					// Pastikan tidak kirim QR atau lakukan proses lain setelah pairing
+					return;
+				} catch (e: any) {
+					logger.error(e, "An error occurred during pairing code generation");
+					if (res && !res.headersSent && !res.writableEnded) {
+						res.status(500).json({ error: "Unable to generate pairing code" });
+					}
+					destroy();
+				}
+			}
+		};
+
 		const handleSSEConnectionUpdate = async () => {
 			let qr: string | undefined = undefined;
 			if (connectionState.qr?.length) {
@@ -194,15 +244,20 @@ class WhatsappService {
 			res.write(`data: ${JSON.stringify(data)}\n\n`);
 		};
 
-		const handleConnectionUpdate = SSE
-			? handleSSEConnectionUpdate
-			: handleNormalConnectionUpdate;
+		const handleConnectionUpdate = pairingCode
+			? handlePairingConnectionUpdate
+			: SSE
+				? handleSSEConnectionUpdate
+				: handleNormalConnectionUpdate;
+
 		const { state, saveCreds } = await useSession(sessionId);
 		const { version } = WhatsappService.whatsappVersion;
 
-
 		const socket = makeWASocket({
 			printQRInTerminal: true,
+			keepAliveIntervalMs: 30000,
+			defaultQueryTimeoutMs: undefined,
+			connectTimeoutMs: 60000,
 			browser: [env.BOT_NAME || "Whatsapp Bot", "Chrome", "3.0"],
 			generateHighQualityLinkPreview: true,
 			...socketConfig,
@@ -246,6 +301,7 @@ class WhatsappService {
 			if (connection === "close") handleConnectionClose();
 			if (connection === "connecting")
 				WhatsappService.updateWaConnection(sessionId, WAStatus.PullingWAData);
+
 			handleConnectionUpdate();
 		});
 

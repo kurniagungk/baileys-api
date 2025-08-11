@@ -96,7 +96,7 @@ export default function messageHandler(sessionId: string, event: BaileysEventEmi
 	};
 
 	const update: BaileysEventHandler<"messages.update"> = async (updates) => {
-		console.log("messages.update", updates);
+	
 		for (const { update, key } of updates) {
 			try {
 				await prisma.$transaction(async (tx) => {
@@ -174,8 +174,7 @@ export default function messageHandler(sessionId: string, event: BaileysEventEmi
 	};
 
 	const updateReceipt: BaileysEventHandler<"message-receipt.update"> = async (updates) => {
-		console.log("message-receipt.update", updates);
-
+		
 		for (const { key, receipt } of updates) {
 			try {
 				await prisma.$transaction(async (tx) => {
