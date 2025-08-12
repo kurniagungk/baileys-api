@@ -14,7 +14,14 @@ export const status: RequestHandler = (req, res) => {
 };
 
 export const add: RequestHandler = async (req, res) => {
-	const { sessionId, pairingCode, phoneNumber, readIncomingMessages, ...socketConfig } = req.body;
+	const {
+		sessionId,
+		pairingCode,
+		phoneNumber,
+		webhookUrl,
+		readIncomingMessages,
+		...socketConfig
+	} = req.body;
 
 	if (WhatsappService.sessionExists(sessionId))
 		return res.status(400).json({ error: "Session already exists" });
@@ -23,6 +30,7 @@ export const add: RequestHandler = async (req, res) => {
 		res,
 		pairingCode,
 		phoneNumber,
+		webhookUrl,
 		readIncomingMessages,
 		socketConfig,
 	});

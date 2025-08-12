@@ -27,6 +27,7 @@ type createSessionOptions = {
 	SSE?: boolean;
 	pairingCode?: boolean;
 	phoneNumber?: string;
+	webhookUrl?: string;
 	readIncomingMessages?: boolean;
 	socketConfig?: SocketConfig;
 };
@@ -49,9 +50,6 @@ class WhatsappService {
 		if (!WhatsappService.whatsappVersion) {
 			WhatsappService.whatsappVersion = await fetchLatestBaileysVersion();
 		}
-
-		const { version, isLatest } = WhatsappService.whatsappVersion;
-	
 
 		const storedSessions = await prisma.session.findMany({
 			select: { sessionId: true, data: true },
@@ -91,6 +89,7 @@ class WhatsappService {
 			socketConfig,
 			pairingCode = false,
 			phoneNumber,
+			webhookUrl = null,
 		} = options;
 
 		const configID = `${env.SESSION_CONFIG_ID}-${sessionId}`;
@@ -171,7 +170,6 @@ class WhatsappService {
 		};
 
 		const handlePairingConnectionUpdate = async () => {
-	
 			if (pairingCode && connectionState.qr?.length) {
 				try {
 					// Jika phoneNumber tidak diberikan, throw error
@@ -319,6 +317,7 @@ class WhatsappService {
 			create: {
 				id: configID,
 				sessionId,
+				webhookUrl,
 				data: JSON.stringify({ readIncomingMessages, ...socketConfig }),
 			},
 			update: {},

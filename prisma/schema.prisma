@@ -171,6 +171,7 @@ model Session {
   sessionId String @db.VarChar(128)
   id        String @db.VarChar(255)
   data      String @db.Text
+  webhookUrl String? @db.VarChar(255) 
 
   @@unique([sessionId, id], name: "sessionId_id", map: "unique_id_per_session_id_4")
   @@index([sessionId])

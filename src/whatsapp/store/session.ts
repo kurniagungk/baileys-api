@@ -14,31 +14,32 @@ export async function useSession(sessionId: string): Promise<{
 }> {
 	const model = prisma.session;
 
-const write = async (data: any, id: string, retry = 0): Promise<void> => {
-  const MAX_RETRIES = 3;
-  const fixedId = fixId(id);
-  const stringified = JSON.stringify(data, BufferJSON.replacer);
+	const write = async (data: any, id: string, retry = 0): Promise<void> => {
 
-  try {
-    logger.info({ sessionId, id: fixedId }, "Try upsert session");
+		const MAX_RETRIES = 3;
+		const fixedId = fixId(id);
+		const stringified = JSON.stringify(data, BufferJSON.replacer);
 
-    await model.upsert({
-      where: { sessionId_id: { id: fixedId, sessionId } },
-      update: { data: stringified },
-      create: { id: fixedId, sessionId, data: stringified },
-    });
-  } catch (e: any) {
-    const isConflict = e.message?.includes("Record has changed");
+		try {
+			logger.info({ sessionId, id: fixedId }, "Try upsert session");
 
-    if (isConflict && retry < MAX_RETRIES) {
-      logger.warn(`Retry write upsert() ${id}, attempt ${retry + 1}`);
-      await new Promise((res) => setTimeout(res, 100 * (retry + 1)));
-      return write(data, id, retry + 1);
-    } else {
-      logger.error(e, "An error occurred during session upsert");
-    }
-  }
-};
+			await model.upsert({
+				where: { sessionId_id: { id: fixedId, sessionId } },
+				update: { data: stringified },
+				create: { id: fixedId, sessionId, data: stringified },
+			});
+		} catch (e: any) {
+			const isConflict = e.message?.includes("Record has changed");
+
+			if (isConflict && retry < MAX_RETRIES) {
+				logger.warn(`Retry write upsert() ${id}, attempt ${retry + 1}`);
+				await new Promise((res) => setTimeout(res, 100 * (retry + 1)));
+				return write(data, id, retry + 1);
+			} else {
+				logger.error(e, "An error occurred during session upsert");
+			}
+		}
+	};
 
 	const read = async (id: string) => {
 		try {

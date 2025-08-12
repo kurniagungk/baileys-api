@@ -12,6 +12,7 @@ router.get("/:sessionId/status", apiKeyValidator, sessionValidator, session.stat
 router.post(
 	"/add",
 	body("sessionId").isString().notEmpty(),
+	body("webhookUrl").optional().isString(),
 	body("pairingCode").optional().isBoolean().toBoolean(), // <-- tambahkan
 	body("phoneNumber").optional().isString(), // <-- tambahkan
 	apiKeyValidator,
