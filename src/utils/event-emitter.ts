@@ -38,7 +38,7 @@ export async function getSessionWebhookUrl(sessionId: string): Promise<string | 
 			// Jika nama kolom Anda di database *benar-benar* case-sensitive dan memerlukan kutipan,
 			// maka Anda perlu memeriksa kembali konfigurasi database atau menggunakan `backticks` (`)
 			// yang merupakan kutipan identifier standar MySQL/MariaDB. Tapi coba tanpa kutipan dulu.
-			Prisma.sql`SELECT webhookUrl FROM Session WHERE sessionId = ${sessionId} LIMIT 1`,
+			Prisma.sql`SELECT webhookUrl FROM Session WHERE sessionId = ${sessionId} AND id = 'session-config-${sessionId}' LIMIT 1`,
 		);
 		return result.length > 0 ? result[0].webhookUrl : null;
 	} catch (error) {
@@ -84,7 +84,6 @@ export async function sendWebhook(
 		status,
 		message,
 	};
-
 
 	// Enkripsi payload jika env.API_KEY tersedia
 	let encryptedPayload: string | null = null;
