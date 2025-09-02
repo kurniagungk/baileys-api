@@ -258,6 +258,7 @@ class WhatsappService {
 			connectTimeoutMs: 60000,
 			browser: [env.BOT_NAME || "Whatsapp Bot", "Chrome", "3.0"],
 			generateHighQualityLinkPreview: true,
+			shouldSyncHistoryMessage: (_msg: proto.Message.IHistorySyncNotification) => true,
 			...socketConfig,
 			auth: {
 				creds: state.creds,

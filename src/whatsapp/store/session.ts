@@ -15,7 +15,6 @@ export async function useSession(sessionId: string): Promise<{
 	const model = prisma.session;
 
 	const write = async (data: any, id: string, retry = 0): Promise<void> => {
-
 		const MAX_RETRIES = 3;
 		const fixedId = fixId(id);
 		const stringified = JSON.stringify(data, BufferJSON.replacer);

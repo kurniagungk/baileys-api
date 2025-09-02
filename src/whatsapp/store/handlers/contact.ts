@@ -9,71 +9,122 @@ export default function contactHandler(sessionId: string, event: BaileysEventEmi
 	const model = prisma.contact;
 	let listening = false;
 
+	// helper: ubah nomor mentah -> JID WhatsApp user
+	function toUserJidFromNumber(num?: string | null): string | null {
+		if (!num) return null;
+		const digits = String(num).replace(/\D/g, "");
+		if (!digits) return null;
+		const normalized = digits.startsWith("0") ? `62${digits.slice(1)}` : digits;
+		return `${normalized}@s.whatsapp.net`;
+	}
+
+	type RawContact = any;
+	type ContactCreateInput = {
+		id: string;
+		sessionId: string;
+		name?: string | null;
+		notify?: string | null;
+		verifiedName?: string | null;
+		imgUrl?: string | null;
+		status?: string | null;
+	};
+
+	function normalizeContact(raw: RawContact, sessionId: string): ContactCreateInput | null {
+		// ambil id dari id -> jid -> fallback nomor (opsional)
+		let id: string | null = raw?.id ?? raw?.jid ?? null;
+		if (!id) id = toUserJidFromNumber(raw?.number ?? raw?.phone ?? null);
+		if (!id) return null; // drop jika tetap tidak ada
+
+		return {
+			id,
+			sessionId,
+			name: raw?.name ?? null,
+			notify: raw?.notify ?? null,
+			verifiedName: raw?.verifiedName ?? null,
+			imgUrl: typeof raw?.imgUrl === "string" ? raw.imgUrl : null,
+			status: raw?.status ?? null,
+		};
+	}
+
 	const set: BaileysEventHandler<"messaging-history.set"> = async ({ contacts }) => {
 		try {
-			// const contactIds = contacts.map((c) => c.id);
-			// const deletedOldContactIds = (
-			// 	await prisma.contact.findMany({
-			// 		select: { id: true },
-			// 		where: { id: { notIn: contactIds }, sessionId },
-			// 	})
-			// ).map((c) => c.id);
 			const session = WhatsappService.getSession(sessionId)!;
+
+			const dropped: RawContact[] = [];
 
 			const processedContacts = await Promise.all(
 				contacts.map(async (contact) => {
 					const transformed = transformPrisma(contact, false);
 
-					// Pastikan properti imgUrl ada, kalau belum ada buat default null
-					if (!("imgUrl" in transformed)) {
+					// pastikan imgUrl property ada (nullable)
+					if (!("imgUrl" in transformed)) transformed.imgUrl = null;
+
+					// hanya cek PP kalau kita punya id/jid untuk dicek
+					const jidForCheck: string | undefined = transformed?.id ?? transformed?.jid;
+					if (jidForCheck) {
+						const exists = await WhatsappService.jidExists(
+							session,
+							jidForCheck,
+							"number",
+						).catch(() => false);
+						transformed.imgUrl = exists
+							? await session.profilePictureUrl(jidForCheck).catch(() => null)
+							: null;
+					} else {
+						// tidak ada id/jid -> nanti akan di-drop saat normalisasi
 						transformed.imgUrl = null;
 					}
 
-					if (typeof transformed.imgUrl !== "undefined") {
-						// cek dulu apakah JID ada
-						const exists = await WhatsappService.jidExists(
-							session,
-							transformed.id!,
-							"number",
-						); // "user" atau tipe yang sesuai
-
-						if (!exists) {
-							transformed.imgUrl = null;
-						} else {
-							// kalau ada, ambil URL foto profil
-							const url = await session
-								.profilePictureUrl(transformed.id!)
-								.catch(() => null);
-							transformed.imgUrl = url;
-	
-						}
-					}
-
-
-					return transformed;
+					const sanitized = normalizeContact(transformed, sessionId);
+					if (!sanitized) dropped.push(contact);
+					return sanitized;
 				}),
 			);
 
-			logger.info(processedContacts[0], "Upsert promises");
+			// buang yang null (tanpa id/jid)
+			const validContacts: ContactCreateInput[] = processedContacts.filter(Boolean) as any[];
 
-			const upsertPromises = processedContacts.map((data) =>
+			logger.info(
+				{ received: contacts.length, saved: validContacts.length, dropped: dropped.length },
+				"Contacts prepared",
+			);
+			if (dropped.length) {
+				logger.warn({ samples: dropped.slice(0, 3) }, "Dropped contacts: missing id/jid");
+			}
+
+			// upsert hanya field yang ada di schema Contact
+			const upsertPromises = validContacts.map((data) =>
 				model.upsert({
 					select: { pkId: true },
-					create: { ...data, sessionId },
-					update: data,
-					where: { sessionId_id: { id: data.id, sessionId } },
+					create: data,
+					update: {
+						name: data.name ?? null,
+						notify: data.notify ?? null,
+						verifiedName: data.verifiedName ?? null,
+						imgUrl: data.imgUrl ?? null,
+						status: data.status ?? null,
+						// id & sessionId tidak diubah pada update
+					},
+					where: { sessionId_id: { id: data.id, sessionId: data.sessionId } },
 				}),
 			);
 
-			logger.info(upsertPromises[0], "Upsert promises");
+			const results = await Promise.allSettled(upsertPromises);
+			const failed = results.filter(
+				(r) => r.status === "rejected",
+			) as PromiseRejectedResult[];
+			if (failed.length) {
+				logger.error(
+					{
+						failed: failed.length,
+						reasons: failed.slice(0, 3).map((f) => String(f.reason)),
+					},
+					"Some upserts failed",
+				);
+			}
 
-			await Promise.any([
-				...upsertPromises,
-				//danger: contacts come with several patches of N contacts, deleting those that are not in this patch ends up deleting those received in the previous patch
-				//prisma.contact.deleteMany({ where: { id: { in: deletedOldContactIds }, sessionId } }),
-			]);
-			logger.info({ newContacts: contacts.length }, "Synced contacts");
-			emitEvent("contacts.set", sessionId, { contacts: processedContacts });
+			logger.info({ newContacts: validContacts.length }, "Synced contacts");
+			emitEvent("contacts.set", sessionId, { contacts: validContacts });
 		} catch (e: unknown) {
 			logger.error(e, "An error occured during contacts set");
 			emitEvent(
@@ -81,9 +132,7 @@ export default function contactHandler(sessionId: string, event: BaileysEventEmi
 				sessionId,
 				undefined,
 				"error",
-				`An error occured during contacts set: ${
-					e instanceof Error ? e.message : String(e)
-				}`,
+				`An error occured during contacts set: ${e instanceof Error ? e.message : String(e)}`,
 			);
 		}
 	};

@@ -83,7 +83,7 @@
 		"tsconfig-paths": "^4.2.0",
 		"tscpaths": "^0.0.9",
 		"tsx": "^4.19.1",
-		"typescript": "^5.3.3"
+		"typescript": "^5.9.2"
 	},
 	"engines": {
 		"node": ">=18.19.0"
