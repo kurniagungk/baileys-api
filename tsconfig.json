@@ -2,7 +2,7 @@
 	"compilerOptions": {
 		"target": "ES6",
 		"module": "CommonJS",
-		"moduleResolution": "Node",
+		"useUnknownInCatchVariables": true,
 		"declaration": false,
 		"lib": [
 			"ESNext"
@@ -20,8 +20,6 @@
 		"strictNullChecks": false,
 		"incremental": true,
 		"noImplicitAny": false,
-		"useUnknownInCatchVariables": true,
-		"ignoreDeprecations": "6.0",
 		"paths": {
 			"@/*": [
 				"src/*"
