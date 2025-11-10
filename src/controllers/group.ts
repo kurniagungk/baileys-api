@@ -52,7 +52,7 @@ export const find: RequestHandler = async (req, res) => {
 	}
 };
 
-export const photo = makePhotoURLHandler("group");
+export const photo: RequestHandler = makePhotoURLHandler("group");
 
 export const create: RequestHandler = async (req, res) => {
 	try {
@@ -195,4 +195,4 @@ export const leave: RequestHandler = async (req, res) => {
 	}
 };
 
-export const presence = presenceHandler("group");
+export const presence: RequestHandler = presenceHandler("group");

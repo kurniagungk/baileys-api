@@ -5,7 +5,7 @@ import requestValidator from "@/middlewares/request-validator";
 import { body } from "express-validator";
 import { apiKeyValidator, apiKeyValidatorParam } from "@/middlewares/api-key-validator";
 
-const router = Router();
+const router: Router = Router();
 router.get("/", apiKeyValidator, session.list);
 router.get("/:sessionId", apiKeyValidator, sessionValidator, session.find);
 router.get("/:sessionId/status", apiKeyValidator, sessionValidator, session.status);

@@ -103,4 +103,4 @@ export const find: RequestHandler = async (req, res) => {
 	}
 };
 
-export const presence = presenceHandler();
+export const presence: RequestHandler = presenceHandler();

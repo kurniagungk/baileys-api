@@ -4,7 +4,7 @@ import { contact } from "@/controllers";
 import requestValidator from "@/middlewares/request-validator";
 import sessionValidator from "@/middlewares/session-validator";
 
-const router = Router({ mergeParams: true });
+const router: Router = Router({ mergeParams: true });
 router.get(
 	"/",
 	query("cursor").isNumeric().optional(),

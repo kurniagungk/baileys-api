@@ -6,7 +6,7 @@ import sessionRoutes from "./sessions";
 import contactRoutes from "./contacts";
 import { apiKeyValidator } from "@/middlewares/api-key-validator";
 
-const router = Router();
+const router: Router = Router();
 router.use("/sessions", sessionRoutes);
 router.use("/:sessionId/chats", apiKeyValidator, chatRoutes);
 router.use("/:sessionId/contacts", apiKeyValidator, contactRoutes);

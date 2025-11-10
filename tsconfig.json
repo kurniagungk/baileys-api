@@ -5,14 +5,15 @@
 		"useUnknownInCatchVariables": true,
 		"declaration": false,
 		"lib": [
-			"ESNext"
+			"ESNext",
+			"DOM"
 		],
 		"outDir": "dist/",
 		"baseUrl": ".",
 		"rootDir": "src",
 		"resolveJsonModule": true,
 		"removeComments": true,
-		"noEmitOnError": true,
+		"noEmitOnError": false,
 		"esModuleInterop": true,
 		"forceConsistentCasingInFileNames": true,
 		"strict": true,

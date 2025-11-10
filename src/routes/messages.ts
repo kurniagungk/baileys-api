@@ -4,7 +4,7 @@ import requestValidator from "@/middlewares/request-validator";
 import sessionValidator from "@/middlewares/session-validator";
 import { query, body } from "express-validator";
 
-const router = Router({ mergeParams: true });
+const router: Router = Router({ mergeParams: true });
 router.get(
 	"/",
 	query("cursor").isNumeric().optional(),

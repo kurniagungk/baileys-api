@@ -3,7 +3,6 @@ import { logger } from "@/utils";
 import { makePhotoURLHandler } from "./misc";
 import { prisma } from "@/config/database";
 import WhatsappService from "@/whatsapp/service";
-import { Prisma } from "@prisma/client";
 
 interface ContactRaw {
 	pkId: number;
@@ -26,7 +25,7 @@ export const list: RequestHandler = async (req, res) => {
 		const cursorNumber = cursor ? Number(cursor) : null;
 
 		const conditions = ["c.sessionId = ?", "c.id LIKE '%@s.whatsapp.net'"];
-		const params: any[] = [sessionId];
+		const params: (string | number)[] = [sessionId];
 
 		if (search) {
 			// Kalau ada search, tambahkan kondisi search, tapi *jangan* tambahkan lidJid IS NOT NULL
@@ -131,4 +130,4 @@ export const check: RequestHandler = async (req, res) => {
 	}
 };
 
-export const photo = makePhotoURLHandler();
+export const photo: RequestHandler = makePhotoURLHandler();
