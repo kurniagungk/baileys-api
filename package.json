@@ -4,7 +4,7 @@
 	"description": "Simple WhatsApp REST API with multiple device support",
 	"main": "dist/main.js",
 	"scripts": {
-		"build": "tsc --project tsconfig.json && tscpaths -p tsconfig.json -s ./src -o ./dist",
+		"build": "tsc --project tsconfig.json && tscpaths -p tsconfig.json -s ./dist -o ./dist",
 		"start": "node -r tsconfig-paths/register -r ts-node ./dist/main.js",
 		"dev": "nodemon src/main.ts",
 		"lint": "eslint . --ext .ts",
@@ -47,7 +47,7 @@
 		"@hapi/boom": "^10.0.1",
 		"@prisma/client": "^6.11.0",
 		"axios": "^1.7.7",
-		"baileys": "^6.7.18",
+		"baileys": "^6.7.21",
 		"cors": "^2.8.5",
 		"dotenv": "^16.4.5",
 		"express": "^4.19.2",
