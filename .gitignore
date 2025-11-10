@@ -6,3 +6,4 @@ prisma/migrations/
 *.tgz
 *.log
 tsconfig.tsbuildinfo
+.DS_Store
