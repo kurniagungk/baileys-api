@@ -60,7 +60,7 @@ export default function contactHandler(sessionId: string, event: BaileysEventEmi
 					if (!("imgUrl" in transformed)) transformed.imgUrl = null;
 
 					// hanya cek PP kalau kita punya id/jid untuk dicek
-					const jidForCheck: string | undefined = transformed?.id ?? transformed?.jid;
+					const jidForCheck: string | undefined = transformed?.id;
 					if (jidForCheck) {
 						const exists = await WhatsappService.jidExists(
 							session,

@@ -65,7 +65,7 @@ export const send: RequestHandler = async (req, res) => {
 export const sendBulk: RequestHandler = async (req, res) => {
 	const { sessionId } = req.params;
 	const session = WhatsappService.getSession(sessionId)!;
-	const results: { index: number; result: proto.WebMessageInfo | undefined }[] = [];
+	const results: { index: number; result: WAMessage | undefined }[] = [];
 	const errors: { index: number; error: string }[] = [];
 
 	for (const [

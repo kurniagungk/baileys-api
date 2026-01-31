@@ -20,7 +20,7 @@ export async function useSession(sessionId: string): Promise<{
 		const stringified = JSON.stringify(data, BufferJSON.replacer);
 
 		try {
-			logger.info({ sessionId, id: fixedId }, "Try upsert session");
+			logger.debug({ sessionId, id: fixedId }, "Try upsert session");
 
 			await model.upsert({
 				where: { sessionId_id: { id: fixedId, sessionId } },
@@ -91,7 +91,7 @@ export async function useSession(sessionId: string): Promise<{
 						ids.map(async (id) => {
 							let value = await read(`${type}-${id}`);
 							if (type === "app-state-sync-key" && value) {
-								value = proto.Message.AppStateSyncKeyData.fromObject(value);
+								value = proto.Message.AppStateSyncKeyData.create(value);
 							}
 							data[id] = value;
 						}),
@@ -99,16 +99,17 @@ export async function useSession(sessionId: string): Promise<{
 					return data;
 				},
 				set: async (data: any): Promise<void> => {
-					const tasks: Promise<void>[] = [];
-
 					for (const category in data) {
 						for (const id in data[category]) {
 							const value = data[category][id];
 							const sId = `${category}-${id}`;
-							tasks.push(value ? write(value, sId) : del(sId));
+							if (value) {
+								await write(value, sId);
+							} else {
+								await del(sId);
+							}
 						}
 					}
-					await Promise.all(tasks);
 				},
 			},
 		},
