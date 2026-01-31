@@ -304,6 +304,27 @@ class WhatsappService {
 			handleConnectionUpdate();
 		});
 
+		// Handle "Bad MAC" and other critical cryptographic errors
+		socket.ev.on("error", async (error: any) => {
+			const errorMessage = error?.message || error?.toString() || "";
+			const isBadMacError = errorMessage.includes("Bad MAC");
+
+			if (isBadMacError) {
+				logger.error(
+					{ session: sessionId, error: errorMessage },
+					"Bad MAC error detected - deleting session and will attempt reconnection",
+				);
+				try {
+					// Destroy the session without logout to force a fresh start
+					await destroy(false);
+					// Attempt to recreate the session
+					setTimeout(() => WhatsappService.createSession(options), 1000);
+				} catch (e: any) {
+					logger.error({ session: sessionId, error: e }, "Error handling Bad MAC error");
+				}
+			}
+		});
+
 		if (readIncomingMessages) {
 			socket.ev.on("messages.upsert", async (m) => {
 				const message = m.messages[0];
