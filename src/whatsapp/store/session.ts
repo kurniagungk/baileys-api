@@ -11,6 +11,7 @@ const fixId = (id: string) => id.replace(/\//g, "__").replace(/:/g, "-");
 export async function useSession(sessionId: string): Promise<{
 	state: AuthenticationState;
 	saveCreds: () => Promise<void>;
+	deleteAllSessionData: () => Promise<void>;
 }> {
 	const model = prisma.session;
 
@@ -74,6 +75,31 @@ export async function useSession(sessionId: string): Promise<{
 		}
 	};
 
+	// Fungsi khusus untuk menghapus semua data session terkait saat terjadi Bad MAC error
+	const deleteAllSessionData = async (): Promise<void> => {
+		try {
+			logger.warn({ sessionId }, "Deleting all session data due to Bad MAC error");
+
+			// Hapus semua data session terkait dari berbagai tabel
+			await Promise.all([
+				prisma.chat.deleteMany({ where: { sessionId } }),
+				prisma.contact.deleteMany({ where: { sessionId } }),
+				prisma.message.deleteMany({ where: { sessionId } }),
+				prisma.groupMetadata.deleteMany({ where: { sessionId } }),
+				prisma.session.deleteMany({ where: { sessionId } }),
+			]);
+
+			logger.info(
+				{ sessionId },
+				"All session data successfully deleted due to Bad MAC error",
+			);
+		} catch (error: Error | unknown) {
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			logger.error({ sessionId, error: errorMessage }, "Failed to delete all session data");
+			throw error;
+		}
+	};
+
 	const creds: AuthenticationCreds = (await read("creds")) || initAuthCreds();
 
 	return {
@@ -89,11 +115,29 @@ export async function useSession(sessionId: string): Promise<{
 					const data: { [key: string]: SignalDataTypeMap[typeof type] } = {};
 					await Promise.all(
 						ids.map(async (id) => {
-							let value = await read(`${type}-${id}`);
-							if (type === "app-state-sync-key" && value) {
-								value = proto.Message.AppStateSyncKeyData.create(value);
+							try {
+								let value = await read(`${type}-${id}`);
+								if (type === "app-state-sync-key" && value) {
+									value = proto.Message.AppStateSyncKeyData.create(value);
+								}
+								data[id] = value;
+							} catch (error: Error | unknown) {
+								const errorMessage =
+									error instanceof Error ? error.message : String(error);
+								// Jika terjadi Bad MAC error saat membaca data, hapus semua session
+								if (errorMessage.includes("Bad MAC")) {
+									logger.error(
+										{ sessionId, id, error: errorMessage },
+										"Bad MAC error detected during key read - deleting all session data",
+									);
+									await deleteAllSessionData();
+									throw new Error(`Bad MAC error detected: ${errorMessage}`);
+								}
+								logger.warn(
+									{ sessionId, id, error: errorMessage },
+									"Error reading session key",
+								);
 							}
-							data[id] = value;
 						}),
 					);
 					return data;
@@ -101,12 +145,30 @@ export async function useSession(sessionId: string): Promise<{
 				set: async (data: any): Promise<void> => {
 					for (const category in data) {
 						for (const id in data[category]) {
-							const value = data[category][id];
-							const sId = `${category}-${id}`;
-							if (value) {
-								await write(value, sId);
-							} else {
-								await del(sId);
+							try {
+								const value = data[category][id];
+								const sId = `${category}-${id}`;
+								if (value) {
+									await write(value, sId);
+								} else {
+									await del(sId);
+								}
+							} catch (error: Error | unknown) {
+								const errorMessage =
+									error instanceof Error ? error.message : String(error);
+								// Jika terjadi Bad MAC error saat menulis data, hapus semua session
+								if (errorMessage.includes("Bad MAC")) {
+									logger.error(
+										{ sessionId, id, error: errorMessage },
+										"Bad MAC error detected during key write - deleting all session data",
+									);
+									await deleteAllSessionData();
+									throw new Error(`Bad MAC error detected: ${errorMessage}`);
+								}
+								logger.warn(
+									{ sessionId, id, error: errorMessage },
+									"Error writing session key",
+								);
 							}
 						}
 					}
@@ -114,5 +176,6 @@ export async function useSession(sessionId: string): Promise<{
 			},
 		},
 		saveCreds: () => write(creds, "creds"),
+		deleteAllSessionData,
 	};
 }

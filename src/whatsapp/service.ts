@@ -248,7 +248,7 @@ class WhatsappService {
 				? handleSSEConnectionUpdate
 				: handleNormalConnectionUpdate;
 
-		const { state, saveCreds } = await useSession(sessionId);
+		const { state, saveCreds, deleteAllSessionData } = await useSession(sessionId);
 		const { version } = WhatsappService.whatsappVersion;
 
 		const socket = makeWASocket({
@@ -285,18 +285,25 @@ class WhatsappService {
 		});
 
 		// Handle uncaught errors from socket operations - simplified approach
-		const handleBadMacError = async (error: any) => {
-			const errorMessage = error?.message || error?.toString() || "";
+		const handleBadMacError = async (error: Error | unknown) => {
+			const errorMessage = error instanceof Error ? error.message : String(error);
 			if (errorMessage.includes("Bad MAC") && WhatsappService.sessions.has(sessionId)) {
 				logger.error(
 					{ session: sessionId, error: errorMessage },
-					"Bad MAC error detected - destroying and recreating session",
+					"Bad MAC error detected - destroying session and deleting from database",
 				);
 				try {
+					// Hapus semua data session terkait menggunakan fungsi khusus
+					await deleteAllSessionData();
+					
+					// Hapus session dari memory
 					await destroy(false);
-					setTimeout(() => WhatsappService.createSession(options), 1000);
-				} catch (e: any) {
-					logger.error({ session: sessionId, error: e }, "Error during Bad MAC recovery");
+					
+					// Coba buat session baru setelah delay
+					setTimeout(() => WhatsappService.createSession(options), 2000);
+				} catch (e: Error | unknown) {
+					const recoveryError = e instanceof Error ? e.message : String(e);
+					logger.error({ session: sessionId, error: recoveryError }, "Error during Bad MAC recovery");
 				}
 			}
 		};
@@ -317,18 +324,23 @@ class WhatsappService {
 				if (isBadMacError) {
 					logger.error(
 						{ session: sessionId, error: errorMessage },
-						"Bad MAC error detected - deleting session and will attempt reconnection",
+						"Bad MAC error detected in connection update - deleting session from database",
 					);
 					try {
+						// Hapus semua data session terkait menggunakan fungsi khusus
+						await deleteAllSessionData();
+						
 						// Destroy the session without logout to force a fresh start
 						await destroy(false);
-						// Attempt to recreate the session
-						setTimeout(() => WhatsappService.createSession(options), 1000);
+						
+						// Attempt to recreate the session dengan delay lebih lama
+						setTimeout(() => WhatsappService.createSession(options), 3000);
 						return;
-					} catch (e: any) {
+					} catch (e: Error | unknown) {
+						const recoveryError = e instanceof Error ? e.message : String(e);
 						logger.error(
-							{ session: sessionId, error: e },
-							"Error handling Bad MAC error",
+							{ session: sessionId, error: recoveryError },
+							"Error handling Bad MAC error in connection update",
 						);
 						return;
 					}
@@ -358,19 +370,32 @@ class WhatsappService {
 					try {
 						await delay(1000);
 						await socket.readMessages([message.key]);
-					} catch (error: any) {
-						const errorMessage =
-							error?.message?.toString?.() || String(error?.message || error || "");
+					} catch (error: Error | unknown) {
+						const errorMessage = error instanceof Error ? error.message : String(error);
 						if (errorMessage.includes("Bad MAC")) {
 							logger.error(
 								{ session: sessionId, error: errorMessage },
-								"Bad MAC error in message read - deleting and recreating session",
+								"Bad MAC error in message read - deleting session from database",
 							);
-							await destroy(false);
-							setTimeout(() => WhatsappService.createSession(options), 1000);
-							return;
+							try {
+								// Hapus semua data session terkait menggunakan fungsi khusus
+								await deleteAllSessionData();
+								
+								// Hapus session dari memory
+								await destroy(false);
+								
+								// Coba buat session baru dengan delay
+								setTimeout(() => WhatsappService.createSession(options), 2000);
+								return;
+							} catch (e: Error | unknown) {
+								const recoveryError = e instanceof Error ? e.message : String(e);
+								logger.error(
+									{ session: sessionId, error: recoveryError },
+									"Error handling Bad MAC error in message read",
+								);
+							}
 						}
-						logger.error({ session: sessionId, error }, "Error reading message");
+						logger.error({ session: sessionId, error: errorMessage }, "Error reading message");
 					}
 				}
 			});
@@ -431,7 +456,7 @@ class WhatsappService {
 			} else {
 				return null;
 			}
-		} catch (e: any) {
+		} catch (e: Error | unknown) {
 			return null;
 		}
 	}
