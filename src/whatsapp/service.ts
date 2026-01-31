@@ -285,9 +285,38 @@ class WhatsappService {
 		});
 
 		socket.ev.on("creds.update", saveCreds);
-		socket.ev.on("connection.update", (update) => {
+		socket.ev.on("connection.update", async (update) => {
 			connectionState = update;
 			const { connection } = update;
+
+			// Handle "Bad MAC" and other critical cryptographic errors
+			if (update.lastDisconnect?.error) {
+				const errorMessage =
+					update.lastDisconnect.error?.message ||
+					update.lastDisconnect.error?.toString() ||
+					"";
+				const isBadMacError = errorMessage.includes("Bad MAC");
+
+				if (isBadMacError) {
+					logger.error(
+						{ session: sessionId, error: errorMessage },
+						"Bad MAC error detected - deleting session and will attempt reconnection",
+					);
+					try {
+						// Destroy the session without logout to force a fresh start
+						await destroy(false);
+						// Attempt to recreate the session
+						setTimeout(() => WhatsappService.createSession(options), 1000);
+						return;
+					} catch (e: any) {
+						logger.error(
+							{ session: sessionId, error: e },
+							"Error handling Bad MAC error",
+						);
+						return;
+					}
+				}
+			}
 
 			if (connection === "open") {
 				WhatsappService.updateWaConnection(
@@ -302,27 +331,6 @@ class WhatsappService {
 				WhatsappService.updateWaConnection(sessionId, WAStatus.PullingWAData);
 
 			handleConnectionUpdate();
-		});
-
-		// Handle "Bad MAC" and other critical cryptographic errors
-		socket.ev.on("error", async (error: any) => {
-			const errorMessage = error?.message || error?.toString() || "";
-			const isBadMacError = errorMessage.includes("Bad MAC");
-
-			if (isBadMacError) {
-				logger.error(
-					{ session: sessionId, error: errorMessage },
-					"Bad MAC error detected - deleting session and will attempt reconnection",
-				);
-				try {
-					// Destroy the session without logout to force a fresh start
-					await destroy(false);
-					// Attempt to recreate the session
-					setTimeout(() => WhatsappService.createSession(options), 1000);
-				} catch (e: any) {
-					logger.error({ session: sessionId, error: e }, "Error handling Bad MAC error");
-				}
-			}
 		});
 
 		if (readIncomingMessages) {
