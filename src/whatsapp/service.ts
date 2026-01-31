@@ -284,6 +284,23 @@ class WhatsappService {
 			waStatus: WAStatus.Unknown,
 		});
 
+		// Handle uncaught errors from socket operations - simplified approach
+		const handleBadMacError = async (error: any) => {
+			const errorMessage = error?.message || error?.toString() || "";
+			if (errorMessage.includes("Bad MAC") && WhatsappService.sessions.has(sessionId)) {
+				logger.error(
+					{ session: sessionId, error: errorMessage },
+					"Bad MAC error detected - destroying and recreating session",
+				);
+				try {
+					await destroy(false);
+					setTimeout(() => WhatsappService.createSession(options), 1000);
+				} catch (e: any) {
+					logger.error({ session: sessionId, error: e }, "Error during Bad MAC recovery");
+				}
+			}
+		};
+
 		socket.ev.on("creds.update", saveCreds);
 		socket.ev.on("connection.update", async (update) => {
 			connectionState = update;
@@ -333,13 +350,29 @@ class WhatsappService {
 			handleConnectionUpdate();
 		});
 
+		// Handle Bad MAC errors with automatic session recovery
 		if (readIncomingMessages) {
 			socket.ev.on("messages.upsert", async (m) => {
-				const message = m.messages[0];
-				if (message.key.fromMe || m.type !== "notify") return;
-
-				await delay(1000);
-				await socket.readMessages([message.key]);
+				for (const message of m.messages) {
+					if (message.key.fromMe || m.type !== "notify") continue;
+					try {
+						await delay(1000);
+						await socket.readMessages([message.key]);
+					} catch (error: any) {
+						const errorMessage =
+							error?.message?.toString?.() || String(error?.message || error || "");
+						if (errorMessage.includes("Bad MAC")) {
+							logger.error(
+								{ session: sessionId, error: errorMessage },
+								"Bad MAC error in message read - deleting and recreating session",
+							);
+							await destroy(false);
+							setTimeout(() => WhatsappService.createSession(options), 1000);
+							return;
+						}
+						logger.error({ session: sessionId, error }, "Error reading message");
+					}
+				}
 			});
 		}
 
