@@ -1,43 +1,33 @@
 {
 	"compilerOptions": {
-		"target": "ES6",
+		"target": "ES2020",
 		"module": "CommonJS",
 		"useUnknownInCatchVariables": true,
-		"declaration": false,
-		"lib": [
-			"ESNext",
-			"DOM"
-		],
+		"declaration": true,
+		"declarationMap": true,
+		"lib": ["ES2020"],
 		"outDir": "dist/",
 		"baseUrl": ".",
 		"rootDir": "src",
 		"resolveJsonModule": true,
 		"removeComments": true,
-		"noEmitOnError": false,
+		"noEmitOnError": true,
 		"esModuleInterop": true,
 		"forceConsistentCasingInFileNames": true,
 		"strict": true,
+		"strictNullChecks": true,
+		"noImplicitAny": true,
 		"skipLibCheck": true,
-		"strictNullChecks": false,
 		"incremental": true,
-		"noImplicitAny": false,
 		"paths": {
 			"@/*": [
 				"src/*"
 			]
 		}
 	},
-	"include": [
-		"src"
-	],
-	"exclude": [
-		"node_modules",
-		"prisma",
-		"dist"
-	],
+	"include": ["src"],
+	"exclude": ["node_modules", "prisma", "dist"],
 	"ts-node": {
-		"require": [
-			"tsconfig-paths/register"
-		]
+		"require": ["tsconfig-paths/register"]
 	}
 }

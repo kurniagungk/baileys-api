@@ -38,11 +38,11 @@ export default function contactHandler(sessionId: string, event: BaileysEventEmi
 		return {
 			id,
 			sessionId,
-			name: raw?.name ?? null,
-			notify: raw?.notify ?? null,
-			verifiedName: raw?.verifiedName ?? null,
-			imgUrl: typeof raw?.imgUrl === "string" ? raw.imgUrl : null,
-			status: raw?.status ?? null,
+			name: raw?.name ?? undefined,
+			notify: raw?.notify ?? undefined,
+			verifiedName: raw?.verifiedName ?? undefined,
+			imgUrl: typeof raw?.imgUrl === "string" ? raw.imgUrl : undefined,
+			status: raw?.status ?? undefined,
 		};
 	}
 
@@ -57,7 +57,7 @@ export default function contactHandler(sessionId: string, event: BaileysEventEmi
 					const transformed = transformPrisma(contact, false);
 
 					// pastikan imgUrl property ada (nullable)
-					if (!("imgUrl" in transformed)) transformed.imgUrl = null;
+					if (!("imgUrl" in transformed)) transformed.imgUrl = undefined;
 
 					// hanya cek PP kalau kita punya id/jid untuk dicek
 					const jidForCheck: string | undefined = transformed?.id;
@@ -68,11 +68,11 @@ export default function contactHandler(sessionId: string, event: BaileysEventEmi
 							"number",
 						).catch(() => false);
 						transformed.imgUrl = exists
-							? await session.profilePictureUrl(jidForCheck).catch(() => null)
-							: null;
+							? await session.profilePictureUrl(jidForCheck).catch(() => undefined)
+							: undefined;
 					} else {
 						// tidak ada id/jid -> nanti akan di-drop saat normalisasi
-						transformed.imgUrl = null;
+						transformed.imgUrl = undefined;
 					}
 
 					const sanitized = normalizeContact(transformed, sessionId);
@@ -98,11 +98,11 @@ export default function contactHandler(sessionId: string, event: BaileysEventEmi
 					select: { pkId: true },
 					create: data,
 					update: {
-						name: data.name ?? null,
-						notify: data.notify ?? null,
-						verifiedName: data.verifiedName ?? null,
-						imgUrl: data.imgUrl ?? null,
-						status: data.status ?? null,
+						name: data.name ?? undefined,
+						notify: data.notify ?? undefined,
+						verifiedName: data.verifiedName ?? undefined,
+						imgUrl: data.imgUrl ?? undefined,
+						status: data.status ?? undefined,
 						// id & sessionId tidak diubah pada update
 					},
 					where: { sessionId_id: { id: data.id, sessionId: data.sessionId } },

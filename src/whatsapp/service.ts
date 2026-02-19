@@ -72,7 +72,7 @@ class WhatsappService {
 	private static shouldReconnect(sessionId: string) {
 		let attempts = WhatsappService.retries.get(sessionId) ?? 0;
 
-		if (attempts < env.MAX_RECONNECT_RETRIES) {
+		if (attempts < (env.MAX_RECONNECT_RETRIES ?? 5)) {
 			attempts += 1;
 			WhatsappService.retries.set(sessionId, attempts);
 			return true;
@@ -94,6 +94,7 @@ class WhatsappService {
 
 		const configID = `${env.SESSION_CONFIG_ID}-${sessionId}`;
 		let connectionState: Partial<ConnectionState> = { connection: "close" };
+		let pairingCodeRequested = false; // Flag to prevent multiple pairing code requests
 
 		const destroy = async (logout = true) => {
 			try {
@@ -106,7 +107,7 @@ class WhatsappService {
 					prisma.session.deleteMany({ where: { sessionId } }),
 				]);
 				logger.info({ session: sessionId }, "Session destroyed");
-			} catch (e: any) {
+			} catch (e: Error | unknown) {
 				logger.error(e, "An error occurred during session destroy");
 			} finally {
 				WhatsappService.sessions.delete(sessionId);
@@ -153,14 +154,14 @@ class WhatsappService {
 						emitEvent("qrcode.updated", sessionId, { qr });
 						res.status(200).json({ qr });
 						return;
-					} catch (e: any) {
+					} catch (e: Error | unknown) {
 						logger.error(e, "An error occurred during QR generation");
 						emitEvent(
 							"qrcode.updated",
 							sessionId,
 							undefined,
 							"error",
-							`Unable to generate QR code: ${e.message}`,
+							`Unable to generate QR code: ${e instanceof Error ? e.message : String(e)}`,
 						);
 						res.status(500).json({ error: "Unable to generate QR" });
 					}
@@ -170,8 +171,26 @@ class WhatsappService {
 		};
 
 		const handlePairingConnectionUpdate = async () => {
-			if (pairingCode && connectionState.qr?.length) {
+			// Wait until connecting or QR event, per Baileys documentation
+			// Connection state bisa "connecting" atau ada QR, dan belum connected
+			const shouldRequestPairing =
+				pairingCode &&
+				!pairingCodeRequested && // Only request once
+				(connectionState.qr?.length || connectionState.connection === "connecting") &&
+				connectionState.connection !== "open";
+
+			if (shouldRequestPairing) {
 				try {
+					// Cek apakah credentials sudah registered atau belum
+					if (socket.authState.creds.registered) {
+						logger.info(
+							{ sessionId },
+							"Credentials already registered, skipping pairing code",
+						);
+						WhatsappService.updateWaConnection(sessionId, WAStatus.Connected);
+						return;
+					}
+
 					// Jika phoneNumber tidak diberikan, throw error
 					if (!phoneNumber) {
 						if (res && !res.headersSent && !res.writableEnded) {
@@ -182,11 +201,18 @@ class WhatsappService {
 						return;
 					}
 
-					await delay(3000);
+					// Wait a bit to ensure connection is ready
+					await delay(10000); // Increased delay to avoid rate limiting
 
 					const phone = phoneNumber.replace(/\D/g, ""); // Hapus semua karakter selain digit
-					const code =
-						await WhatsappService.getSession(sessionId).requestPairingCode(phone); // Request pairing code
+					logger.info({ sessionId, phone }, "Requesting pairing code...");
+
+					const code = await socket.requestPairingCode(phone); // Request pairing code
+
+					logger.info({ sessionId, code }, "Pairing code generated successfully");
+
+					// Mark pairing code as requested to prevent multiple requests
+					pairingCodeRequested = true;
 
 					// Kirim pairing code sebagai response tanpa QR
 					if (res && !res.headersSent && !res.writableEnded) {
@@ -195,7 +221,7 @@ class WhatsappService {
 
 					// Pastikan tidak kirim QR atau lakukan proses lain setelah pairing
 					return;
-				} catch (e: any) {
+				} catch (e: Error | unknown) {
 					logger.error(e, "An error occurred during pairing code generation");
 					if (res && !res.headersSent && !res.writableEnded) {
 						res.status(500).json({ error: "Unable to generate pairing code" });
@@ -211,14 +237,14 @@ class WhatsappService {
 				try {
 					WhatsappService.updateWaConnection(sessionId, WAStatus.WaitQrcodeAuth);
 					qr = await toDataURL(connectionState.qr);
-				} catch (e: any) {
+				} catch (e: Error | unknown) {
 					logger.error(e, "An error occurred during QR generation");
 					emitEvent(
 						"qrcode.updated",
 						sessionId,
 						undefined,
 						"error",
-						`Unable to generate QR code: ${e.message}`,
+						`Unable to generate QR code: ${e instanceof Error ? e.message : String(e)}`,
 					);
 				}
 			}
@@ -227,7 +253,7 @@ class WhatsappService {
 			if (
 				!res ||
 				res.writableEnded ||
-				(qr && currentGenerations >= env.SSE_MAX_QR_GENERATION)
+				(qr && currentGenerations >= (env.SSE_MAX_QR_GENERATION ?? 5))
 			) {
 				res && !res.writableEnded && res.end();
 				destroy();
@@ -249,16 +275,22 @@ class WhatsappService {
 				: handleNormalConnectionUpdate;
 
 		const { state, saveCreds, deleteAllSessionData } = await useSession(sessionId);
+
+		if (!WhatsappService.whatsappVersion) {
+			throw new Error("WhatsApp version not initialized");
+		}
 		const { version } = WhatsappService.whatsappVersion;
 
 		const socket = makeWASocket({
-			printQRInTerminal: true,
+			printQRInTerminal: pairingCode ? false : true, // Disable QR print for pairing code
 			keepAliveIntervalMs: 30000,
 			defaultQueryTimeoutMs: undefined,
 			connectTimeoutMs: 60000,
-			browser: [env.BOT_NAME || "Whatsapp Bot", "Chrome", "3.0"],
+			browser: pairingCode
+				? ["Windows", "Chrome", "114.0.5735.198"] // Use specific browser version for pairing
+				: [env.BOT_NAME || "Whatsapp Bot", "Chrome", "3.0"],
 			generateHighQualityLinkPreview: true,
-			shouldSyncHistoryMessage: (_msg: proto.Message.IHistorySyncNotification) => true,
+			shouldSyncHistoryMessage: () => true,
 			...socketConfig,
 			auth: {
 				creds: state.creds,
@@ -284,30 +316,6 @@ class WhatsappService {
 			waStatus: WAStatus.Unknown,
 		});
 
-		// Handle uncaught errors from socket operations - simplified approach
-		const handleBadMacError = async (error: Error | unknown) => {
-			const errorMessage = error instanceof Error ? error.message : String(error);
-			if (errorMessage.includes("Bad MAC") && WhatsappService.sessions.has(sessionId)) {
-				logger.error(
-					{ session: sessionId, error: errorMessage },
-					"Bad MAC error detected - destroying session and deleting from database",
-				);
-				try {
-					// Hapus semua data session terkait menggunakan fungsi khusus
-					await deleteAllSessionData();
-					
-					// Hapus session dari memory
-					await destroy(false);
-					
-					// Coba buat session baru setelah delay
-					setTimeout(() => WhatsappService.createSession(options), 2000);
-				} catch (e: Error | unknown) {
-					const recoveryError = e instanceof Error ? e.message : String(e);
-					logger.error({ session: sessionId, error: recoveryError }, "Error during Bad MAC recovery");
-				}
-			}
-		};
-
 		socket.ev.on("creds.update", saveCreds);
 		socket.ev.on("connection.update", async (update) => {
 			connectionState = update;
@@ -329,10 +337,10 @@ class WhatsappService {
 					try {
 						// Hapus semua data session terkait menggunakan fungsi khusus
 						await deleteAllSessionData();
-						
+
 						// Destroy the session without logout to force a fresh start
 						await destroy(false);
-						
+
 						// Attempt to recreate the session dengan delay lebih lama
 						setTimeout(() => WhatsappService.createSession(options), 3000);
 						return;
@@ -380,10 +388,10 @@ class WhatsappService {
 							try {
 								// Hapus semua data session terkait menggunakan fungsi khusus
 								await deleteAllSessionData();
-								
+
 								// Hapus session dari memory
 								await destroy(false);
-								
+
 								// Coba buat session baru dengan delay
 								setTimeout(() => WhatsappService.createSession(options), 2000);
 								return;
@@ -395,7 +403,10 @@ class WhatsappService {
 								);
 							}
 						}
-						logger.error({ session: sessionId, error: errorMessage }, "Error reading message");
+						logger.error(
+							{ session: sessionId, error: errorMessage },
+							"Error reading message",
+						);
 					}
 				}
 			});
@@ -442,7 +453,8 @@ class WhatsappService {
 	static async validJid(session: Session, jid: string, type: "group" | "number" = "number") {
 		try {
 			if (type === "number") {
-				const [result] = await session.onWhatsApp(jid);
+				const results = await session.onWhatsApp(jid);
+				const result = results?.[0];
 				if (result?.exists) {
 					return result.jid;
 				} else {

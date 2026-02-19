@@ -17,11 +17,11 @@ export default function chatHandler(sessionId: string, event: BaileysEventEmitte
 				const existingIds = (
 					await tx.chat.findMany({
 						select: { id: true },
-						where: { id: { in: chats.map((c) => c.id) }, sessionId },
+						where: { id: { in: chats.map((c) => c.id).filter((id): id is string => id != null) }, sessionId },
 					})
 				).map((i) => i.id);
 				const processedChats = chats
-					.filter((c) => !existingIds.includes(c.id))
+					.filter((c) => c.id != null && !existingIds.includes(c.id))
 					.map((c) => ({
 						...(transformPrisma(c) as MakeTransformedPrisma<Chat>),
 						sessionId,
@@ -50,20 +50,23 @@ export default function chatHandler(sessionId: string, event: BaileysEventEmitte
 	const upsert: BaileysEventHandler<"chats.upsert"> = async (chats) => {
 		try {
 			const results: MakeTransformedPrisma<Chat>[] = [];
-			
-			await Promise.any(
-				chats
-					.map((c) => transformPrisma(c) as MakeTransformedPrisma<Chat>)
-					.map((data) => {
-						model.upsert({
-							select: { pkId: true },
-							create: { ...data, sessionId },
-							update: data,
-							where: { sessionId_id: { id: data.id, sessionId } },
-						});
-						results.push(data);
+
+			const upsertPromises = chats
+				.map((c) => transformPrisma(c) as MakeTransformedPrisma<Chat>)
+				.map((data) =>
+					model.upsert({
+						select: { pkId: true },
+						create: { ...data, sessionId },
+						update: data,
+						where: { sessionId_id: { id: data.id, sessionId } },
 					}),
-			);
+				);
+
+			await Promise.all(upsertPromises);
+			chats.forEach((c) => {
+				const data = transformPrisma(c) as MakeTransformedPrisma<Chat>;
+				results.push(data);
+			});
 			emitEvent("chats.upsert", sessionId, { chats: results });
 		} catch (e: any) {
 			logger.error(e, "An error occured during chats upsert");
