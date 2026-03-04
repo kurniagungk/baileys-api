@@ -193,12 +193,27 @@ export default function contactHandler(sessionId: string, event: BaileysEventEmi
 				});
 				if (result.count === 0) {
 					logger.info({ update }, "Got update for non existent contact");
+					emitEvent(
+						"contacts.update",
+						sessionId,
+						{ contacts: data },
+						"success",
+						"Skipped update: contact not found",
+					);
 					continue;
 				}
 				emitEvent("contacts.update", sessionId, { contacts: data });
 			} catch (e: any) {
 				if (e instanceof PrismaClientKnownRequestError && e.code === "P2025") {
 					logger.info({ update }, "Got update for non existent contact");
+					const data = transformPrisma(update);
+					emitEvent(
+						"contacts.update",
+						sessionId,
+						{ contacts: data },
+						"success",
+						"Skipped update: contact not found",
+					);
 					continue;
 				}
 				logger.error(e, "An error occured during contact update");
