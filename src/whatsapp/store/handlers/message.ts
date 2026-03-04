@@ -189,7 +189,7 @@ export default function messageHandler(sessionId: string, event: BaileysEventEmi
 					});
 					if (!message) {
 						return logger.debug(
-							{ update },
+							{ key, receipt },
 							"Got receipt update for non existent message",
 						);
 					}

@@ -139,8 +139,8 @@ export default function contactHandler(sessionId: string, event: BaileysEventEmi
 
 	const upsert: BaileysEventHandler<"contacts.upsert"> = async (contacts) => {
 		try {
-			console.info(`Received ${contacts.length} contacts for upsert.`); // Informative message
-			console.info(contacts[0]); // Informative message
+			logger.info(`Received ${contacts.length} contacts for upsert.`);
+			logger.info(contacts[0]);
 
 			if (contacts.length === 0) {
 				return;
@@ -189,7 +189,7 @@ export default function contactHandler(sessionId: string, event: BaileysEventEmi
 				delete (data as any).sessionId;
 				const result = await model.updateMany({
 					data,
-					where: { id: update.id!, sessionId },
+					where: { id: update.id, sessionId },
 				});
 				if (result.count === 0) {
 					logger.info({ update }, "Got update for non existent contact");

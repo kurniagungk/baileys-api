@@ -94,8 +94,8 @@ function contactHandler(sessionId, event) {
     };
     const upsert = async (contacts) => {
         try {
-            console.info(`Received ${contacts.length} contacts for upsert.`);
-            console.info(contacts[0]);
+            utils_1.logger.info(`Received ${contacts.length} contacts for upsert.`);
+            utils_1.logger.info(contacts[0]);
             if (contacts.length === 0) {
                 return;
             }
