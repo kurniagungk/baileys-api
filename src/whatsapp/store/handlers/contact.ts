@@ -139,8 +139,8 @@ export default function contactHandler(sessionId: string, event: BaileysEventEmi
 
 	const upsert: BaileysEventHandler<"contacts.upsert"> = async (contacts) => {
 		try {
-			console.info(`Received ${contacts.length} contacts for upsert.`); // Informative message
-			console.info(contacts[0]); // Informative message
+			logger.info(`Received ${contacts.length} contacts for upsert.`);
+			logger.info(contacts[0]);
 
 			if (contacts.length === 0) {
 				return;
@@ -172,18 +172,34 @@ export default function contactHandler(sessionId: string, event: BaileysEventEmi
 	const update: BaileysEventHandler<"contacts.update"> = async (updates) => {
 		for (const update of updates) {
 			try {
+				if (!update?.id) {
+					const data = transformPrisma(update);
+					logger.info({ update }, "Got update without contact id");
+					emitEvent(
+						"contacts.update",
+						sessionId,
+						{ contacts: data },
+						"success",
+						"Skipped update: missing contact id",
+					);
+					continue;
+				}
 				const data = transformPrisma(update);
-				await model.update({
-					select: { pkId: true },
+				delete (data as any).id;
+				delete (data as any).sessionId;
+				const result = await model.updateMany({
 					data,
-					where: {
-						sessionId_id: { id: update.id!, sessionId },
-					},
+					where: { id: update.id, sessionId },
 				});
+				if (result.count === 0) {
+					logger.info({ update }, "Got update for non existent contact");
+					continue;
+				}
 				emitEvent("contacts.update", sessionId, { contacts: data });
 			} catch (e: any) {
 				if (e instanceof PrismaClientKnownRequestError && e.code === "P2025") {
-					return logger.info({ update }, "Got update for non existent contact");
+					logger.info({ update }, "Got update for non existent contact");
+					continue;
 				}
 				logger.error(e, "An error occured during contact update");
 				emitEvent(
