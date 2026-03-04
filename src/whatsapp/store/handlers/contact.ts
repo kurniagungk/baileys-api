@@ -170,6 +170,7 @@ export default function contactHandler(sessionId: string, event: BaileysEventEmi
 	};
 
 	const update: BaileysEventHandler<"contacts.update"> = async (updates) => {
+		logger.info({ count: updates.length }, "contacts.update received");
 		for (const update of updates) {
 			try {
 				if (!update?.id) {
@@ -231,6 +232,7 @@ export default function contactHandler(sessionId: string, event: BaileysEventEmi
 	const listen = () => {
 		if (listening) return;
 
+		logger.info("Contact handler listening");
 		event.on("messaging-history.set", set);
 		event.on("contacts.upsert", upsert);
 		event.on("contacts.update", update);
