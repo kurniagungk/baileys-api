@@ -129,6 +129,16 @@ export async function sendWebhook(
 
 	// Kirim request POST menggunakan axios
 	try {
+		logger.info(
+			{
+				webhookUrl,
+				sessionId,
+				event,
+				status,
+				encrypted: Boolean(encryptedPayload),
+			},
+			"Sending webhook",
+		);
 		await axios.post(webhookUrl, encryptedDataPayload, {
 			// Anda bisa menambahkan header di sini jika diperlukan, misal untuk menandakan enkripsi
 			// headers: { 'Content-Type': 'application/json', ...(encryptedPayload ? { 'X-Encrypted': 'true' } : {}) }
