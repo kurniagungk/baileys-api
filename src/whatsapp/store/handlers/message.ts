@@ -108,12 +108,17 @@ export default function messageHandler(sessionId: string, event: BaileysEventEmi
 					}
 
 					const data = { ...prevData, ...update } as proto.IWebMessageInfo;
+					
+					if (!data.key || !data.key.id || !data.key.remoteJid) {
+						return logger.info({ update, key }, "Message key is incomplete");
+					}
+					
 					await tx.message.delete({
 						select: { pkId: true },
 						where: {
 							sessionId_remoteJid_id: {
-								id: key.id!,
-								remoteJid: key.remoteJid!,
+								id: data.key.id,
+								remoteJid: data.key.remoteJid,
 								sessionId,
 							},
 						},
@@ -121,8 +126,8 @@ export default function messageHandler(sessionId: string, event: BaileysEventEmi
 
 					const processedMessage = {
 						...(transformPrisma(data) as MakeTransformedPrisma<Message>),
-						id: data.key.id!,
-						remoteJid: data.key.remoteJid!,
+						id: data.key.id,
+						remoteJid: data.key.remoteJid,
 						sessionId,
 					};
 					await tx.message.create({
@@ -131,7 +136,7 @@ export default function messageHandler(sessionId: string, event: BaileysEventEmi
 					});
 
 					// Gunakan utilitas agar tidak duplikat kode
-					await resetUnreadCount(sessionId, data.key.remoteJid!);
+					await resetUnreadCount(sessionId, data.key.remoteJid);
 
 					emitEvent("messages.update", sessionId, { messages: processedMessage });
 				});

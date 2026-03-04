@@ -72,7 +72,7 @@ export const find: RequestHandler = async (req, res) => {
 					const key = m.key as MessageKey | undefined;
 					return key && !key.fromMe;
 				})
-				.slice(0, chat!.unreadCount);
+				.slice(0, chat!.unreadCount ?? 0);
 
 			const keys = unreadMessages.map((m) => {
 				const key = m.key as MessageKey;
@@ -80,7 +80,7 @@ export const find: RequestHandler = async (req, res) => {
 					remoteJid: key.remoteJid,
 					id: key.id,
 					fromMe: key.fromMe,
-					participant: m.participant || undefined,
+					participant: m.participant ?? undefined,
 				};
 			});
 

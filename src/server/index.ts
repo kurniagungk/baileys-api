@@ -7,13 +7,14 @@ import { initializeSocketEmitter } from "@/utils";
 
 export class Server {
 	private httpServer: ExpressServer;
-	private socketServer: SocketServer;
+	private socketServer: SocketServer | null;
 	private httpPort = env.PORT;
 	private server: http.Server;
 
 	constructor() {
 		this.httpServer = new ExpressServer();
 		this.server = http.createServer(this.httpServer.getApp());
+		this.socketServer = null;
 		this.setupSocketServer();
 	}
 

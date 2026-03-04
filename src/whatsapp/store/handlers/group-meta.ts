@@ -12,19 +12,23 @@ export default function groupMetadataHandler(sessionId: string, event: BaileysEv
 	const upsert: BaileysEventHandler<"groups.upsert"> = async (groups) => {
 		try {
 			const results: MakeTransformedPrisma<GroupMetadata>[] = [];
-			await Promise.any(
-				groups
-					.map((g) => transformPrisma(g))
-					.map((data) => {
-						model.upsert({
-							select: { pkId: true },
-							create: { ...data, sessionId },
-							update: data,
-							where: { sessionId_id: { id: data.id, sessionId } },
-						});
-						results.push(data);
+
+			const upsertPromises = groups
+				.map((g) => transformPrisma(g))
+				.map((data) =>
+					model.upsert({
+						select: { pkId: true },
+						create: { ...data, sessionId },
+						update: data,
+						where: { sessionId_id: { id: data.id, sessionId } },
 					}),
-			);
+				);
+
+			await Promise.all(upsertPromises);
+			groups.forEach((g) => {
+				const data = transformPrisma(g);
+				results.push(data);
+			});
 			emitEvent("groups.upsert", sessionId, { groups: results });
 		} catch (e: any) {
 			logger.error(e, "An error occured during groups upsert");
