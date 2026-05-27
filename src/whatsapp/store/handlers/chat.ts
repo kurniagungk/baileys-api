@@ -58,7 +58,8 @@ export default function chatHandler(sessionId: string, event: BaileysEventEmitte
 
 			if (byId.size === 0) return;
 
-			const upsertPromises = Array.from(byId.values()).map((data) =>
+			const upsertData = Array.from(byId.values());
+			const upsertPromises = upsertData.map((data) =>
 				model.upsert({
 					select: { pkId: true },
 					create: { ...data, sessionId },
@@ -79,9 +80,23 @@ export default function chatHandler(sessionId: string, event: BaileysEventEmitte
 					},
 					"Some chats upserts failed",
 				);
+				emitEvent(
+					"chats.upsert",
+					sessionId,
+					undefined,
+					"error",
+					`An error occured during chats upsert: ${failed.length} chat(s) failed to persist`,
+				);
 			}
 
-			emitEvent("chats.upsert", sessionId, { chats: Array.from(byId.values()) });
+			const results = settled.reduce<MakeTransformedPrisma<Chat>[]>(
+				(successful, result, index) => {
+					if (result.status === "fulfilled") successful.push(upsertData[index]);
+					return successful;
+				},
+				[],
+			);
+			if (results.length) emitEvent("chats.upsert", sessionId, { chats: results });
 		} catch (e: any) {
 			logger.error(e, "An error occured during chats upsert");
 			emitEvent(
