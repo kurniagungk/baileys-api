@@ -1,0 +1,243 @@
+{
+  "worktree": "/Volumes/data/program/baileys-api",
+  "changedFiles": [
+    "src/server/index.ts",
+    "src/utils/event-emitter.ts",
+    "src/utils/logger.ts",
+    "src/whatsapp/service.ts",
+    "src/whatsapp/store/handlers/chat.ts",
+    "src/whatsapp/store/handlers/contact.ts",
+    "src/whatsapp/store/handlers/message.ts",
+    "src/whatsapp/store/session.ts",
+    "prisma/schema.prisma",
+    "package.json"
+  ],
+  "findings": [
+    {
+      "source": "linter",
+      "tool": "eslint",
+      "file": "src/utils/event-emitter.ts",
+      "line": 144,
+      "column": 14,
+      "severity": "Critical",
+      "message": "Unexpected any. Specify a different type.",
+      "ruleId": "@typescript-eslint/no-explicit-any"
+    },
+    {
+      "source": "linter",
+      "tool": "eslint",
+      "file": "src/whatsapp/service.ts",
+      "line": 350,
+      "column": 20,
+      "severity": "Critical",
+      "message": "'_res' is assigned a value but never used.",
+      "ruleId": "@typescript-eslint/no-unused-vars"
+    },
+    {
+      "source": "linter",
+      "tool": "eslint",
+      "file": "src/whatsapp/service.ts",
+      "line": 402,
+      "column": 22,
+      "severity": "Critical",
+      "message": "'_res' is assigned a value but never used.",
+      "ruleId": "@typescript-eslint/no-unused-vars"
+    },
+    {
+      "source": "linter",
+      "tool": "eslint",
+      "file": "src/whatsapp/store/handlers/chat.ts",
+      "line": 38,
+      "column": 15,
+      "severity": "Critical",
+      "message": "Unexpected any. Specify a different type.",
+      "ruleId": "@typescript-eslint/no-explicit-any"
+    },
+    {
+      "source": "linter",
+      "tool": "eslint",
+      "file": "src/whatsapp/store/handlers/chat.ts",
+      "line": 85,
+      "column": 15,
+      "severity": "Critical",
+      "message": "Unexpected any. Specify a different type.",
+      "ruleId": "@typescript-eslint/no-explicit-any"
+    },
+    {
+      "source": "linter",
+      "tool": "eslint",
+      "file": "src/whatsapp/store/handlers/chat.ts",
+      "line": 126,
+      "column": 16,
+      "severity": "Critical",
+      "message": "Unexpected any. Specify a different type.",
+      "ruleId": "@typescript-eslint/no-explicit-any"
+    },
+    {
+      "source": "linter",
+      "tool": "eslint",
+      "file": "src/whatsapp/store/handlers/chat.ts",
+      "line": 150,
+      "column": 15,
+      "severity": "Critical",
+      "message": "Unexpected any. Specify a different type.",
+      "ruleId": "@typescript-eslint/no-explicit-any"
+    },
+    {
+      "source": "linter",
+      "tool": "eslint",
+      "file": "src/whatsapp/store/handlers/contact.ts",
+      "line": 21,
+      "column": 20,
+      "severity": "Critical",
+      "message": "Unexpected any. Specify a different type.",
+      "ruleId": "@typescript-eslint/no-explicit-any"
+    },
+    {
+      "source": "linter",
+      "tool": "eslint",
+      "file": "src/whatsapp/store/handlers/contact.ts",
+      "line": 85,
+      "column": 85,
+      "severity": "Critical",
+      "message": "Unexpected any. Specify a different type.",
+      "ruleId": "@typescript-eslint/no-explicit-any"
+    },
+    {
+      "source": "linter",
+      "tool": "eslint",
+      "file": "src/whatsapp/store/handlers/contact.ts",
+      "line": 162,
+      "column": 19,
+      "severity": "Critical",
+      "message": "Unexpected any. Specify a different type.",
+      "ruleId": "@typescript-eslint/no-explicit-any"
+    },
+    {
+      "source": "linter",
+      "tool": "eslint",
+      "file": "src/whatsapp/store/handlers/contact.ts",
+      "line": 190,
+      "column": 21,
+      "severity": "Critical",
+      "message": "Unexpected any. Specify a different type.",
+      "ruleId": "@typescript-eslint/no-explicit-any"
+    },
+    {
+      "source": "linter",
+      "tool": "eslint",
+      "file": "src/whatsapp/store/handlers/contact.ts",
+      "line": 191,
+      "column": 21,
+      "severity": "Critical",
+      "message": "Unexpected any. Specify a different type.",
+      "ruleId": "@typescript-eslint/no-explicit-any"
+    },
+    {
+      "source": "linter",
+      "tool": "eslint",
+      "file": "src/whatsapp/store/handlers/contact.ts",
+      "line": 214,
+      "column": 16,
+      "severity": "Critical",
+      "message": "Unexpected any. Specify a different type.",
+      "ruleId": "@typescript-eslint/no-explicit-any"
+    },
+    {
+      "source": "linter",
+      "tool": "eslint",
+      "file": "src/whatsapp/store/handlers/message.ts",
+      "line": 33,
+      "column": 15,
+      "severity": "Critical",
+      "message": "Unexpected any. Specify a different type.",
+      "ruleId": "@typescript-eslint/no-explicit-any"
+    },
+    {
+      "source": "linter",
+      "tool": "eslint",
+      "file": "src/whatsapp/store/handlers/message.ts",
+      "line": 84,
+      "column": 18,
+      "severity": "Critical",
+      "message": "Unexpected any. Specify a different type.",
+      "ruleId": "@typescript-eslint/no-explicit-any"
+    },
+    {
+      "source": "linter",
+      "tool": "eslint",
+      "file": "src/whatsapp/store/handlers/message.ts",
+      "line": 144,
+      "column": 16,
+      "severity": "Critical",
+      "message": "Unexpected any. Specify a different type.",
+      "ruleId": "@typescript-eslint/no-explicit-any"
+    },
+    {
+      "source": "linter",
+      "tool": "eslint",
+      "file": "src/whatsapp/store/handlers/message.ts",
+      "line": 170,
+      "column": 15,
+      "severity": "Critical",
+      "message": "Unexpected any. Specify a different type.",
+      "ruleId": "@typescript-eslint/no-explicit-any"
+    },
+    {
+      "source": "linter",
+      "tool": "eslint",
+      "file": "src/whatsapp/store/handlers/message.ts",
+      "line": 224,
+      "column": 16,
+      "severity": "Critical",
+      "message": "Unexpected any. Specify a different type.",
+      "ruleId": "@typescript-eslint/no-explicit-any"
+    },
+    {
+      "source": "linter",
+      "tool": "eslint",
+      "file": "src/whatsapp/store/handlers/message.ts",
+      "line": 271,
+      "column": 16,
+      "severity": "Critical",
+      "message": "Unexpected any. Specify a different type.",
+      "ruleId": "@typescript-eslint/no-explicit-any"
+    }
+  ],
+  "toolsRun": [
+    {
+      "tool": "tsc",
+      "source": "typecheck",
+      "exitCode": 0,
+      "durationMs": 4688,
+      "findingsCount": 0,
+      "timedOut": false
+    },
+    {
+      "tool": "eslint",
+      "source": "linter",
+      "exitCode": 1,
+      "durationMs": 4092,
+      "findingsCount": 19,
+      "timedOut": false
+    }
+  ],
+  "toolsSkipped": [
+    {
+      "tool": "ruff",
+      "reason": "no ruff config (ruff.toml / .ruff.toml / pyproject [tool.ruff])"
+    },
+    {
+      "tool": "cargo-clippy",
+      "reason": "Cargo.toml not found"
+    },
+    {
+      "tool": "go-vet",
+      "reason": "go.mod not found"
+    },
+    {
+      "tool": "golangci-lint",
+      "reason": "go.mod not found"
+    }
+  ]
+}

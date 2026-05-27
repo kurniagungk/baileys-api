@@ -1,0 +1,1 @@
+["src/server/index.ts","src/utils/event-emitter.ts","src/utils/logger.ts","src/whatsapp/service.ts","src/whatsapp/store/handlers/chat.ts","src/whatsapp/store/handlers/contact.ts","src/whatsapp/store/handlers/message.ts","src/whatsapp/store/session.ts","prisma/schema.prisma","package.json"]
