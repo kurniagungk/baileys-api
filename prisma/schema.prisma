@@ -57,7 +57,9 @@ model Chat {
   wallpaper                 Json?
   lastMessageRecvTimestamp  Int?
   commentsCount             Int?
-  locked                    Boolean? 
+  locked                    Boolean?
+  lidOriginType             String?  @db.VarChar(64)
+  accountLid                String?  @db.VarChar(128)
 
   @@unique([sessionId, id], map: "unique_id_per_session_id_1")
   @@index([sessionId])
@@ -111,6 +113,7 @@ model Message {
   remoteJid                       String   @db.VarChar(128)
   id                              String   @db.VarChar(128)
   agentId                         String?  @db.VarChar(128)
+  category                        String?  @db.VarChar(64)
   bizPrivacyStatus                Int?
   broadcast                       Boolean?
   clearMedia                      Boolean?

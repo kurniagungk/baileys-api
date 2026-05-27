@@ -2,7 +2,6 @@ import type { EventsType } from "@/types/websocket";
 import type { SocketServer } from "../server/websocket-server";
 import env from "@/config/env";
 import axios from "axios";
-import { Prisma } from "@prisma/client"; // Import Prisma namespace jika belum
 import { prisma } from "@/config/database";
 import { logger } from "@/utils";
 import crypto from "crypto";
@@ -23,29 +22,20 @@ export function emitEvent(
 		sendWebhook(event, sessionId, data, status, message);
 	}
 
-	if (!socketServer) {
-		console.error("Socket server not initialized. Call initializeSocketEmitter first.");
-		return;
-	}
+	if (!socketServer) return;
 	socketServer.emitEvent(event, sessionId, { status, message, data });
 }
 
 export async function getSessionWebhookUrl(sessionId: string): Promise<string | null> {
 	try {
-		// bikin string id di JS, lebih aman
-		const sessionConfigId = `session-config-${sessionId}`;
+		const sessionConfigId = `${env.SESSION_CONFIG_ID}-${sessionId}`;
 
-		const result = await prisma.$queryRaw<Array<{ webhookUrl: string | null }>>(
-			Prisma.sql`
-				SELECT webhookUrl
-				FROM \`Session\`
-				WHERE sessionId = ${sessionId}
-				  AND id = ${sessionConfigId}
-				LIMIT 1
-			`,
-		);
+		const result = await prisma.session.findUnique({
+			select: { webhookUrl: true },
+			where: { sessionId_id: { id: sessionConfigId, sessionId } },
+		});
 
-		return result.length > 0 ? result[0].webhookUrl : null;
+		return result?.webhookUrl ?? null;
 	} catch (error) {
 		console.error("Error fetching webhookUrl:", error);
 		return null;

@@ -27,7 +27,7 @@ type createSessionOptions = {
 	SSE?: boolean;
 	pairingCode?: boolean;
 	phoneNumber?: string;
-	webhookUrl?: string;
+	webhookUrl?: string | null;
 	readIncomingMessages?: boolean;
 	socketConfig?: SocketConfig;
 };
@@ -52,12 +52,17 @@ class WhatsappService {
 		}
 
 		const storedSessions = await prisma.session.findMany({
-			select: { sessionId: true, data: true },
+			select: { sessionId: true, data: true, webhookUrl: true },
 			where: { id: { startsWith: env.SESSION_CONFIG_ID } },
 		});
-		for (const { sessionId, data } of storedSessions) {
+		for (const { sessionId, data, webhookUrl } of storedSessions) {
 			const { readIncomingMessages, ...socketConfig } = JSON.parse(data);
-			WhatsappService.createSession({ sessionId, readIncomingMessages, socketConfig });
+			WhatsappService.createSession({
+				sessionId,
+				readIncomingMessages,
+				socketConfig,
+				webhookUrl,
+			});
 		}
 	}
 
@@ -89,12 +94,17 @@ class WhatsappService {
 			socketConfig,
 			pairingCode = false,
 			phoneNumber,
-			webhookUrl = null,
+			webhookUrl,
 		} = options;
 
 		const configID = `${env.SESSION_CONFIG_ID}-${sessionId}`;
 		let connectionState: Partial<ConnectionState> = { connection: "close" };
 		let pairingCodeRequested = false; // Flag to prevent multiple pairing code requests
+		const getRecoveryOptions = () => {
+			const recoveryOptions = { ...options };
+			delete recoveryOptions.res;
+			return recoveryOptions;
+		};
 
 		const destroy = async (logout = true) => {
 			try {
@@ -118,9 +128,16 @@ class WhatsappService {
 		const handleConnectionClose = () => {
 			const code = (connectionState.lastDisconnect?.error as Boom)?.output?.statusCode;
 			const restartRequired = code === DisconnectReason.restartRequired;
-			const doNotReconnect = !WhatsappService.shouldReconnect(sessionId);
 
 			WhatsappService.updateWaConnection(sessionId, WAStatus.Disconected);
+
+			if (restartRequired) {
+				WhatsappService.retries.delete(sessionId);
+				setTimeout(() => WhatsappService.createSession(getRecoveryOptions()), 0);
+				return;
+			}
+
+			const doNotReconnect = !WhatsappService.shouldReconnect(sessionId);
 
 			if (code === DisconnectReason.loggedOut || doNotReconnect) {
 				if (res) {
@@ -133,15 +150,13 @@ class WhatsappService {
 				return;
 			}
 
-			if (!restartRequired) {
-				logger.info(
-					{ attempts: WhatsappService.retries.get(sessionId) ?? 1, sessionId },
-					"Reconnecting...",
-				);
-			}
+			logger.info(
+				{ attempts: WhatsappService.retries.get(sessionId) ?? 1, sessionId },
+				"Reconnecting...",
+			);
 			setTimeout(
-				() => WhatsappService.createSession(options),
-				restartRequired ? 0 : env.RECONNECT_INTERVAL,
+				() => WhatsappService.createSession(getRecoveryOptions()),
+				env.RECONNECT_INTERVAL,
 			);
 		};
 
@@ -341,8 +356,8 @@ class WhatsappService {
 						// Destroy the session without logout to force a fresh start
 						await destroy(false);
 
-						// Attempt to recreate the session dengan delay lebih lama
-						setTimeout(() => WhatsappService.createSession(options), 3000);
+						// Strip res agar tidak menulis ke response HTTP yang sudah ditutup
+						setTimeout(() => WhatsappService.createSession(getRecoveryOptions()), 3000);
 						return;
 					} catch (e: Error | unknown) {
 						const recoveryError = e instanceof Error ? e.message : String(e);
@@ -392,8 +407,8 @@ class WhatsappService {
 								// Hapus session dari memory
 								await destroy(false);
 
-								// Coba buat session baru dengan delay
-								setTimeout(() => WhatsappService.createSession(options), 2000);
+								// Coba buat session baru dengan delay, strip res yang sudah ditutup
+								setTimeout(() => WhatsappService.createSession(getRecoveryOptions()), 2000);
 								return;
 							} catch (e: Error | unknown) {
 								const recoveryError = e instanceof Error ? e.message : String(e);
@@ -416,17 +431,20 @@ class WhatsappService {
 			create: {
 				id: configID,
 				sessionId,
-				webhookUrl,
+				webhookUrl: webhookUrl ?? null,
 				data: JSON.stringify({ readIncomingMessages, ...socketConfig }),
 			},
-			update: {},
+			update: {
+				...(webhookUrl !== undefined ? { webhookUrl } : {}),
+				data: JSON.stringify({ readIncomingMessages, ...socketConfig }),
+			},
 			where: { sessionId_id: { id: configID, sessionId } },
 		});
 	}
 
 	static getSessionStatus(session: Session) {
 		const state = ["CONNECTING", "CONNECTED", "DISCONNECTING", "DISCONNECTED"];
-		let status = state[(session.ws as unknown as WebSocketType).readyState]; // Fixed line
+		let status = state[(session.ws as unknown as WebSocketType).readyState] ?? "UNKNOWN";
 		status = session.user ? "AUTHENTICATED" : status;
 		return session.waStatus !== WAStatus.Unknown ? session.waStatus : status.toLowerCase();
 	}

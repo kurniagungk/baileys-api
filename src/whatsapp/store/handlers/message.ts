@@ -25,6 +25,7 @@ export default function messageHandler(sessionId: string, event: BaileysEventEmi
 				}));
 				await tx.message.createMany({
 					data: processedMessages,
+					skipDuplicates: true,
 				});
 				emitEvent("messages.upsert", sessionId, { messages: processedMessages });
 			});

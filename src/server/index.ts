@@ -25,16 +25,16 @@ export class Server {
 	}
 
 	public async start(): Promise<void> {
-		// Initialize WhatsApp connection
+		if (this.socketServer) {
+			initializeSocketEmitter(this.socketServer);
+			console.log("WebSocket server is running");
+		}
+
+		// Initialize WhatsApp connection setelah socket emitter siap
 		new WhatsappService();
 
 		this.server.listen(this.httpPort, () => {
 			console.log(`Server is running on port ${this.httpPort}`);
 		});
-
-		if (this.socketServer) {
-			initializeSocketEmitter(this.socketServer);
-			console.log("WebSocket server is running");
-		}
 	}
 }

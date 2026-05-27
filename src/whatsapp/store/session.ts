@@ -8,6 +8,19 @@ import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 
 const fixId = (id: string) => id.replace(/\//g, "__").replace(/:/g, "-");
 
+const rowLocks = new Map<string, Promise<unknown>>();
+
+const withRowLock = async <T>(key: string, fn: () => Promise<T>): Promise<T> => {
+	const prev = rowLocks.get(key) ?? Promise.resolve();
+	const next = prev.then(fn, fn);
+	let tail: Promise<unknown>;
+	tail = next.finally(() => {
+		if (rowLocks.get(key) === tail) rowLocks.delete(key);
+	});
+	rowLocks.set(key, tail);
+	return next;
+};
+
 export async function useSession(sessionId: string): Promise<{
 	state: AuthenticationState;
 	saveCreds: () => Promise<void>;
@@ -15,30 +28,38 @@ export async function useSession(sessionId: string): Promise<{
 }> {
 	const model = prisma.session;
 
-	const write = async (data: any, id: string, retry = 0): Promise<void> => {
-		const MAX_RETRIES = 3;
+	const write = async (data: any, id: string): Promise<void> => {
 		const fixedId = fixId(id);
 		const stringified = JSON.stringify(data, BufferJSON.replacer);
+		const maxRetries = 3;
+		const lockKey = `${sessionId}:${fixedId}`;
 
-		try {
-			logger.debug({ sessionId, id: fixedId }, "Try upsert session");
+		await withRowLock(lockKey, async () => {
+			for (let attempt = 0; attempt <= maxRetries; attempt++) {
+				try {
+					logger.debug({ sessionId, id: fixedId, attempt }, "Try upsert session");
 
-			await model.upsert({
-				where: { sessionId_id: { id: fixedId, sessionId } },
-				update: { data: stringified },
-				create: { id: fixedId, sessionId, data: stringified },
-			});
-		} catch (e: any) {
-			const isConflict = e.message?.includes("Record has changed");
-
-			if (isConflict && retry < MAX_RETRIES) {
-				logger.warn(`Retry write upsert() ${id}, attempt ${retry + 1}`);
-				await new Promise((res) => setTimeout(res, 100 * (retry + 1)));
-				return write(data, id, retry + 1);
-			} else {
-				logger.error(e, "An error occurred during session upsert");
+					await model.upsert({
+						select: { pkId: true },
+						create: { sessionId, id: fixedId, data: stringified },
+						update: { data: stringified },
+						where: { sessionId_id: { id: fixedId, sessionId } },
+					});
+					return;
+				} catch (e: any) {
+					if (attempt < maxRetries) {
+						logger.warn(
+							{ sessionId, id: fixedId, attempt: attempt + 1 },
+							"Retry session upsert",
+						);
+						await new Promise((resolve) => setTimeout(resolve, 100 * (attempt + 1)));
+						continue;
+					}
+					logger.error(e, "Session upsert failed after retries");
+					throw e;
+				}
 			}
-		}
+		});
 	};
 
 	const read = async (id: string) => {
@@ -65,14 +86,19 @@ export async function useSession(sessionId: string): Promise<{
 	};
 
 	const del = async (id: string) => {
-		try {
-			await model.delete({
-				select: { pkId: true },
-				where: { sessionId_id: { id: fixId(id), sessionId } },
-			});
-		} catch (e) {
-			logger.error(e, "An error occured during session delete");
-		}
+		const fixedId = fixId(id);
+		const lockKey = `${sessionId}:${fixedId}`;
+
+		await withRowLock(lockKey, async () => {
+			try {
+				await model.delete({
+					select: { pkId: true },
+					where: { sessionId_id: { id: fixedId, sessionId } },
+				});
+			} catch (e) {
+				logger.error(e, "An error occured during session delete");
+			}
+		});
 	};
 
 	// Fungsi khusus untuk menghapus semua data session terkait saat terjadi Bad MAC error
@@ -175,7 +201,13 @@ export async function useSession(sessionId: string): Promise<{
 				},
 			},
 		},
-		saveCreds: () => write(creds, "creds"),
+		saveCreds: async () => {
+			try {
+				await write(creds, "creds");
+			} catch (e) {
+				logger.error({ sessionId, err: e }, "saveCreds failed");
+			}
+		},
 		deleteAllSessionData,
 	};
 }

@@ -49,25 +49,54 @@ export default function chatHandler(sessionId: string, event: BaileysEventEmitte
 
 	const upsert: BaileysEventHandler<"chats.upsert"> = async (chats) => {
 		try {
-			const results: MakeTransformedPrisma<Chat>[] = [];
-
-			const upsertPromises = chats
-				.map((c) => transformPrisma(c) as MakeTransformedPrisma<Chat>)
-				.map((data) =>
-					model.upsert({
-						select: { pkId: true },
-						create: { ...data, sessionId },
-						update: data,
-						where: { sessionId_id: { id: data.id, sessionId } },
-					}),
-				);
-
-			await Promise.all(upsertPromises);
-			chats.forEach((c) => {
+			const byId = new Map<string, MakeTransformedPrisma<Chat>>();
+			for (const c of chats) {
 				const data = transformPrisma(c) as MakeTransformedPrisma<Chat>;
-				results.push(data);
-			});
-			emitEvent("chats.upsert", sessionId, { chats: results });
+				if (!data.id) continue;
+				byId.set(data.id, data);
+			}
+
+			if (byId.size === 0) return;
+
+			const upsertData = Array.from(byId.values());
+			const upsertPromises = upsertData.map((data) =>
+				model.upsert({
+					select: { pkId: true },
+					create: { ...data, sessionId },
+					update: data,
+					where: { sessionId_id: { id: data.id, sessionId } },
+				}),
+			);
+
+			const settled = await Promise.allSettled(upsertPromises);
+			const failed = settled.filter(
+				(r): r is PromiseRejectedResult => r.status === "rejected",
+			);
+			if (failed.length) {
+				logger.error(
+					{
+						failed: failed.length,
+						reasons: failed.slice(0, 3).map((f) => String(f.reason)),
+					},
+					"Some chats upserts failed",
+				);
+				emitEvent(
+					"chats.upsert",
+					sessionId,
+					undefined,
+					"error",
+					`An error occured during chats upsert: ${failed.length} chat(s) failed to persist`,
+				);
+			}
+
+			const results = settled.reduce<MakeTransformedPrisma<Chat>[]>(
+				(successful, result, index) => {
+					if (result.status === "fulfilled") successful.push(upsertData[index]);
+					return successful;
+				},
+				[],
+			);
+			if (results.length) emitEvent("chats.upsert", sessionId, { chats: results });
 		} catch (e: any) {
 			logger.error(e, "An error occured during chats upsert");
 			emitEvent(
