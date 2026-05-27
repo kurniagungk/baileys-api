@@ -27,7 +27,7 @@ type createSessionOptions = {
 	SSE?: boolean;
 	pairingCode?: boolean;
 	phoneNumber?: string;
-	webhookUrl?: string;
+	webhookUrl?: string | null;
 	readIncomingMessages?: boolean;
 	socketConfig?: SocketConfig;
 };
@@ -52,12 +52,17 @@ class WhatsappService {
 		}
 
 		const storedSessions = await prisma.session.findMany({
-			select: { sessionId: true, data: true },
+			select: { sessionId: true, data: true, webhookUrl: true },
 			where: { id: { startsWith: env.SESSION_CONFIG_ID } },
 		});
-		for (const { sessionId, data } of storedSessions) {
+		for (const { sessionId, data, webhookUrl } of storedSessions) {
 			const { readIncomingMessages, ...socketConfig } = JSON.parse(data);
-			WhatsappService.createSession({ sessionId, readIncomingMessages, socketConfig });
+			WhatsappService.createSession({
+				sessionId,
+				readIncomingMessages,
+				socketConfig,
+				webhookUrl,
+			});
 		}
 	}
 
@@ -89,12 +94,17 @@ class WhatsappService {
 			socketConfig,
 			pairingCode = false,
 			phoneNumber,
-			webhookUrl = null,
+			webhookUrl,
 		} = options;
 
 		const configID = `${env.SESSION_CONFIG_ID}-${sessionId}`;
 		let connectionState: Partial<ConnectionState> = { connection: "close" };
 		let pairingCodeRequested = false; // Flag to prevent multiple pairing code requests
+		const getRecoveryOptions = () => {
+			const recoveryOptions = { ...options };
+			delete recoveryOptions.res;
+			return recoveryOptions;
+		};
 
 		const destroy = async (logout = true) => {
 			try {
@@ -123,7 +133,7 @@ class WhatsappService {
 
 			if (restartRequired) {
 				WhatsappService.retries.delete(sessionId);
-				setTimeout(() => WhatsappService.createSession(options), 0);
+				setTimeout(() => WhatsappService.createSession(getRecoveryOptions()), 0);
 				return;
 			}
 
@@ -145,7 +155,7 @@ class WhatsappService {
 				"Reconnecting...",
 			);
 			setTimeout(
-				() => WhatsappService.createSession(options),
+				() => WhatsappService.createSession(getRecoveryOptions()),
 				env.RECONNECT_INTERVAL,
 			);
 		};
@@ -347,8 +357,7 @@ class WhatsappService {
 						await destroy(false);
 
 						// Strip res agar tidak menulis ke response HTTP yang sudah ditutup
-						const { res: _res, ...recoveryOptions } = options;
-						setTimeout(() => WhatsappService.createSession(recoveryOptions), 3000);
+						setTimeout(() => WhatsappService.createSession(getRecoveryOptions()), 3000);
 						return;
 					} catch (e: Error | unknown) {
 						const recoveryError = e instanceof Error ? e.message : String(e);
@@ -399,8 +408,7 @@ class WhatsappService {
 								await destroy(false);
 
 								// Coba buat session baru dengan delay, strip res yang sudah ditutup
-								const { res: _res, ...recoveryOptions } = options;
-								setTimeout(() => WhatsappService.createSession(recoveryOptions), 2000);
+								setTimeout(() => WhatsappService.createSession(getRecoveryOptions()), 2000);
 								return;
 							} catch (e: Error | unknown) {
 								const recoveryError = e instanceof Error ? e.message : String(e);
@@ -423,11 +431,11 @@ class WhatsappService {
 			create: {
 				id: configID,
 				sessionId,
-				webhookUrl,
+				webhookUrl: webhookUrl ?? null,
 				data: JSON.stringify({ readIncomingMessages, ...socketConfig }),
 			},
 			update: {
-				webhookUrl,
+				...(webhookUrl !== undefined ? { webhookUrl } : {}),
 				data: JSON.stringify({ readIncomingMessages, ...socketConfig }),
 			},
 			where: { sessionId_id: { id: configID, sessionId } },
