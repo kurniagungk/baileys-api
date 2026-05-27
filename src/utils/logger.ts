@@ -1,12 +1,8 @@
 import env from "@/config/env";
 import pino, { type Logger } from "pino";
 import path from "path";
-import fs from "fs";
 
 const logsDir = path.resolve(process.cwd(), "logs");
-if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
-
-const logFile = path.join(logsDir, `app-${new Date().toISOString().slice(0, 10)}.log`);
 
 export const logger: Logger = pino({
 	timestamp: () => `,"time":"${new Date().toJSON()}"`,
@@ -21,9 +17,12 @@ export const logger: Logger = pino({
 			},
 			{
 				level: env.LOG_LEVEL || "debug",
-				target: "pino/file",
+				target: "pino-roll",
 				options: {
-					destination: logFile,
+					file: path.join(logsDir, "app"),
+					frequency: "daily",
+					dateFormat: "yyyy-MM-dd",
+					extension: ".log",
 					mkdir: true,
 				},
 			},
