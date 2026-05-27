@@ -15,29 +15,20 @@ export async function useSession(sessionId: string): Promise<{
 }> {
 	const model = prisma.session;
 
-	const write = async (data: any, id: string, retry = 0): Promise<void> => {
-		const MAX_RETRIES = 3;
+	const write = async (data: any, id: string): Promise<void> => {
 		const fixedId = fixId(id);
 		const stringified = JSON.stringify(data, BufferJSON.replacer);
 
 		try {
 			logger.debug({ sessionId, id: fixedId }, "Try upsert session");
 
-			await model.upsert({
-				where: { sessionId_id: { id: fixedId, sessionId } },
-				update: { data: stringified },
-				create: { id: fixedId, sessionId, data: stringified },
-			});
+			await prisma.$executeRaw`
+				INSERT INTO \`Session\` (\`sessionId\`, \`id\`, \`data\`)
+				VALUES (${sessionId}, ${fixedId}, ${stringified})
+				ON DUPLICATE KEY UPDATE \`data\` = VALUES(\`data\`)
+			`;
 		} catch (e: any) {
-			const isConflict = e.message?.includes("Record has changed");
-
-			if (isConflict && retry < MAX_RETRIES) {
-				logger.warn(`Retry write upsert() ${id}, attempt ${retry + 1}`);
-				await new Promise((res) => setTimeout(res, 100 * (retry + 1)));
-				return write(data, id, retry + 1);
-			} else {
-				logger.error(e, "An error occurred during session upsert");
-			}
+			logger.error(e, "An error occurred during session upsert");
 		}
 	};
 

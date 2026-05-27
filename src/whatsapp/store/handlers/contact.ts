@@ -139,26 +139,28 @@ export default function contactHandler(sessionId: string, event: BaileysEventEmi
 
 	const upsert: BaileysEventHandler<"contacts.upsert"> = async (contacts) => {
 		try {
-			logger.info(`Received ${contacts.length} contacts for upsert.`);
-			logger.info(contacts[0]);
+			logger.info({ count: contacts.length, sample: contacts[0] }, "Received contacts for upsert");
 
 			if (contacts.length === 0) {
 				return;
 			}
 
-			const processedContacts = contacts
-				.map((contact) => transformPrisma(contact))
-				.map((contact) => ({
-					...contact,
-					sessionId,
-				}));
+			const normalized = contacts
+				.map((contact) => normalizeContact(transformPrisma(contact), sessionId))
+				.filter((c): c is ContactCreateInput => c !== null);
+
+			if (normalized.length === 0) {
+				logger.warn("contacts.upsert: semua kontak dibuang karena tidak punya id/jid");
+				return;
+			}
+
 			await model.createMany({
-				data: processedContacts,
-				skipDuplicates: true, // Prevent duplicate inserts
+				data: normalized,
+				skipDuplicates: true,
 			});
-			emitEvent("contacts.upsert", sessionId, { contacts: processedContacts });
+			emitEvent("contacts.upsert", sessionId, { contacts: normalized });
 		} catch (error: any) {
-			logger.error("An unexpected error occurred during contacts upsert", error);
+			logger.error(error, "An unexpected error occurred during contacts upsert");
 			emitEvent(
 				"contacts.upsert",
 				sessionId,
@@ -174,12 +176,11 @@ export default function contactHandler(sessionId: string, event: BaileysEventEmi
 		for (const update of updates) {
 			try {
 				if (!update?.id) {
-					const data = transformPrisma(update);
 					logger.info({ update }, "Got update without contact id");
 					emitEvent(
 						"contacts.update",
 						sessionId,
-						{ contacts: data },
+						{ contacts: [transformPrisma(update)] },
 						"success",
 						"Skipped update: missing contact id",
 					);
@@ -188,6 +189,12 @@ export default function contactHandler(sessionId: string, event: BaileysEventEmi
 				const data = transformPrisma(update);
 				delete (data as any).id;
 				delete (data as any).sessionId;
+
+				if (Object.keys(data).length === 0) {
+					logger.info({ update }, "Got update with no updatable fields, skipping");
+					continue;
+				}
+
 				const result = await model.updateMany({
 					data,
 					where: { id: update.id, sessionId },
@@ -197,21 +204,20 @@ export default function contactHandler(sessionId: string, event: BaileysEventEmi
 					emitEvent(
 						"contacts.update",
 						sessionId,
-						{ contacts: data },
+						{ contacts: [data] },
 						"success",
 						"Skipped update: contact not found",
 					);
 					continue;
 				}
-				emitEvent("contacts.update", sessionId, { contacts: data });
+				emitEvent("contacts.update", sessionId, { contacts: [data] });
 			} catch (e: any) {
 				if (e instanceof PrismaClientKnownRequestError && e.code === "P2025") {
 					logger.info({ update }, "Got update for non existent contact");
-					const data = transformPrisma(update);
 					emitEvent(
 						"contacts.update",
 						sessionId,
-						{ contacts: data },
+						{ contacts: [transformPrisma(update)] },
 						"success",
 						"Skipped update: contact not found",
 					);

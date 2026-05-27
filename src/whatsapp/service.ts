@@ -118,9 +118,16 @@ class WhatsappService {
 		const handleConnectionClose = () => {
 			const code = (connectionState.lastDisconnect?.error as Boom)?.output?.statusCode;
 			const restartRequired = code === DisconnectReason.restartRequired;
-			const doNotReconnect = !WhatsappService.shouldReconnect(sessionId);
 
 			WhatsappService.updateWaConnection(sessionId, WAStatus.Disconected);
+
+			if (restartRequired) {
+				WhatsappService.retries.delete(sessionId);
+				setTimeout(() => WhatsappService.createSession(options), 0);
+				return;
+			}
+
+			const doNotReconnect = !WhatsappService.shouldReconnect(sessionId);
 
 			if (code === DisconnectReason.loggedOut || doNotReconnect) {
 				if (res) {
@@ -133,15 +140,13 @@ class WhatsappService {
 				return;
 			}
 
-			if (!restartRequired) {
-				logger.info(
-					{ attempts: WhatsappService.retries.get(sessionId) ?? 1, sessionId },
-					"Reconnecting...",
-				);
-			}
+			logger.info(
+				{ attempts: WhatsappService.retries.get(sessionId) ?? 1, sessionId },
+				"Reconnecting...",
+			);
 			setTimeout(
 				() => WhatsappService.createSession(options),
-				restartRequired ? 0 : env.RECONNECT_INTERVAL,
+				env.RECONNECT_INTERVAL,
 			);
 		};
 
@@ -341,8 +346,9 @@ class WhatsappService {
 						// Destroy the session without logout to force a fresh start
 						await destroy(false);
 
-						// Attempt to recreate the session dengan delay lebih lama
-						setTimeout(() => WhatsappService.createSession(options), 3000);
+						// Strip res agar tidak menulis ke response HTTP yang sudah ditutup
+						const { res: _res, ...recoveryOptions } = options;
+						setTimeout(() => WhatsappService.createSession(recoveryOptions), 3000);
 						return;
 					} catch (e: Error | unknown) {
 						const recoveryError = e instanceof Error ? e.message : String(e);
@@ -392,8 +398,9 @@ class WhatsappService {
 								// Hapus session dari memory
 								await destroy(false);
 
-								// Coba buat session baru dengan delay
-								setTimeout(() => WhatsappService.createSession(options), 2000);
+								// Coba buat session baru dengan delay, strip res yang sudah ditutup
+								const { res: _res, ...recoveryOptions } = options;
+								setTimeout(() => WhatsappService.createSession(recoveryOptions), 2000);
 								return;
 							} catch (e: Error | unknown) {
 								const recoveryError = e instanceof Error ? e.message : String(e);
@@ -419,14 +426,17 @@ class WhatsappService {
 				webhookUrl,
 				data: JSON.stringify({ readIncomingMessages, ...socketConfig }),
 			},
-			update: {},
+			update: {
+				webhookUrl,
+				data: JSON.stringify({ readIncomingMessages, ...socketConfig }),
+			},
 			where: { sessionId_id: { id: configID, sessionId } },
 		});
 	}
 
 	static getSessionStatus(session: Session) {
 		const state = ["CONNECTING", "CONNECTED", "DISCONNECTING", "DISCONNECTED"];
-		let status = state[(session.ws as unknown as WebSocketType).readyState]; // Fixed line
+		let status = state[(session.ws as unknown as WebSocketType).readyState] ?? "UNKNOWN";
 		status = session.user ? "AUTHENTICATED" : status;
 		return session.waStatus !== WAStatus.Unknown ? session.waStatus : status.toLowerCase();
 	}

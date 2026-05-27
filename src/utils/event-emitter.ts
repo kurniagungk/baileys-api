@@ -23,10 +23,7 @@ export function emitEvent(
 		sendWebhook(event, sessionId, data, status, message);
 	}
 
-	if (!socketServer) {
-		console.error("Socket server not initialized. Call initializeSocketEmitter first.");
-		return;
-	}
+	if (!socketServer) return;
 	socketServer.emitEvent(event, sessionId, { status, message, data });
 }
 
