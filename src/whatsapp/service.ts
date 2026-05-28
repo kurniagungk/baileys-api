@@ -99,7 +99,7 @@ class WhatsappService {
 
 		const configID = `${env.SESSION_CONFIG_ID}-${sessionId}`;
 		let connectionState: Partial<ConnectionState> = { connection: "close" };
-		let pairingCodeRequested = false; // Flag to prevent multiple pairing code requests
+		let pairingCodeSent = false;
 		const getRecoveryOptions = () => {
 			const recoveryOptions = { ...options };
 			delete recoveryOptions.res;
@@ -186,64 +186,8 @@ class WhatsappService {
 		};
 
 		const handlePairingConnectionUpdate = async () => {
-			// Wait until connecting or QR event, per Baileys documentation
-			// Connection state bisa "connecting" atau ada QR, dan belum connected
-			const shouldRequestPairing =
-				pairingCode &&
-				!pairingCodeRequested && // Only request once
-				(connectionState.qr?.length || connectionState.connection === "connecting") &&
-				connectionState.connection !== "open";
-
-			if (shouldRequestPairing) {
-				try {
-					// Cek apakah credentials sudah registered atau belum
-					if (socket.authState.creds.registered) {
-						logger.info(
-							{ sessionId },
-							"Credentials already registered, skipping pairing code",
-						);
-						WhatsappService.updateWaConnection(sessionId, WAStatus.Connected);
-						return;
-					}
-
-					// Jika phoneNumber tidak diberikan, throw error
-					if (!phoneNumber) {
-						if (res && !res.headersSent && !res.writableEnded) {
-							return res.status(400).json({
-								error: "phoneNumber is required when pairingCode is true",
-							});
-						}
-						return;
-					}
-
-					// Wait a bit to ensure connection is ready
-					await delay(10000); // Increased delay to avoid rate limiting
-
-					const phone = phoneNumber.replace(/\D/g, ""); // Hapus semua karakter selain digit
-					logger.info({ sessionId, phone }, "Requesting pairing code...");
-
-					const code = await socket.requestPairingCode(phone); // Request pairing code
-
-					logger.info({ sessionId, code }, "Pairing code generated successfully");
-
-					// Mark pairing code as requested to prevent multiple requests
-					pairingCodeRequested = true;
-
-					// Kirim pairing code sebagai response tanpa QR
-					if (res && !res.headersSent && !res.writableEnded) {
-						res.status(200).json({ pairingCode: code });
-					}
-
-					// Pastikan tidak kirim QR atau lakukan proses lain setelah pairing
-					return;
-				} catch (e: Error | unknown) {
-					logger.error(e, "An error occurred during pairing code generation");
-					if (res && !res.headersSent && !res.writableEnded) {
-						res.status(500).json({ error: "Unable to generate pairing code" });
-					}
-					destroy();
-				}
-			}
+			// Pairing code di-request langsung setelah makeWASocket (Pola A doc Baileys).
+			// Handler ini sengaja no-op agar QR event tidak mengganggu pairing flow.
 		};
 
 		const handleSSEConnectionUpdate = async () => {
@@ -332,6 +276,47 @@ class WhatsappService {
 		});
 
 		socket.ev.on("creds.update", saveCreds);
+
+		const requestPairingCodeIfNeeded = async (update: Partial<ConnectionState>) => {
+			// Pola B Baileys: requestPairingCode hanya aman setelah ws OPEN
+			// (event `qr` di-emit setelah noise handshake selesai).
+			if (
+				!pairingCode ||
+				pairingCodeSent ||
+				socket.authState.creds.registered ||
+				!update.qr
+			) {
+				return;
+			}
+			pairingCodeSent = true; // set SEBELUM await agar tidak race
+
+			if (!phoneNumber) {
+				if (res && !res.headersSent) {
+					res.status(400).json({
+						error: "phoneNumber is required when pairingCode is true",
+					});
+				}
+				await destroy(false);
+				return;
+			}
+			try {
+				const phone = phoneNumber.replace(/\D/g, "");
+				logger.info({ sessionId, phone }, "Requesting pairing code...");
+				const code = await socket.requestPairingCode(phone);
+				logger.info({ sessionId, code }, "Pairing code generated successfully");
+				if (res && !res.headersSent) {
+					res.status(200).json({ pairingCode: code });
+				}
+			} catch (e: Error | unknown) {
+				logger.error(e, "An error occurred during pairing code generation");
+				pairingCodeSent = false; // izinkan retry jika benar-benar gagal
+				if (res && !res.headersSent) {
+					res.status(500).json({ error: "Unable to generate pairing code" });
+				}
+				await destroy(false);
+			}
+		};
+
 		socket.ev.on("connection.update", async (update) => {
 			connectionState = update;
 			const { connection } = update;
@@ -382,6 +367,7 @@ class WhatsappService {
 			if (connection === "connecting")
 				WhatsappService.updateWaConnection(sessionId, WAStatus.PullingWAData);
 
+			await requestPairingCodeIfNeeded(update);
 			handleConnectionUpdate();
 		});
 
