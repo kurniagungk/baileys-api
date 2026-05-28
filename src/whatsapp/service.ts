@@ -120,6 +120,16 @@ class WhatsappService {
 			} catch (e: Error | unknown) {
 				logger.error(e, "An error occurred during session destroy");
 			} finally {
+				if (!logout) {
+					try {
+						socket.end(undefined);
+					} catch (e: Error | unknown) {
+						logger.warn(
+							{ session: sessionId, error: e instanceof Error ? e.message : String(e) },
+							"Failed to end socket during destroy",
+						);
+					}
+				}
 				WhatsappService.sessions.delete(sessionId);
 				WhatsappService.updateWaConnection(sessionId, WAStatus.Disconected);
 			}
