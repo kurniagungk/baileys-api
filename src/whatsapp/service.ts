@@ -452,7 +452,7 @@ class WhatsappService {
 	static listSessions() {
 		return Array.from(WhatsappService.sessions.entries()).map(([id, session]) => ({
 			id,
-			status: WhatsappService.getSessionStatus(session),
+			...WhatsappService.getSessionStatus(session),
 		}));
 	}
 
