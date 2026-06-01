@@ -10,7 +10,7 @@ export const find: RequestHandler = (req, res) =>
 
 export const status: RequestHandler = (req, res) => {
 	const session = WhatsappService.getSession(req.params.sessionId)!;
-	res.status(200).json({ status: WhatsappService.getSessionStatus(session) });
+	res.status(200).json(WhatsappService.getSessionStatus(session));
 };
 
 export const add: RequestHandler = async (req, res) => {

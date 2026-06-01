@@ -442,13 +442,17 @@ class WhatsappService {
 		const state = ["CONNECTING", "CONNECTED", "DISCONNECTING", "DISCONNECTED"];
 		let status = state[(session.ws as unknown as WebSocketType).readyState] ?? "UNKNOWN";
 		status = session.user ? "AUTHENTICATED" : status;
-		return session.waStatus !== WAStatus.Unknown ? session.waStatus : status.toLowerCase();
+		const phoneNumber = session.user?.id?.split("@")[0] ?? null;
+		return {
+			status: session.waStatus !== WAStatus.Unknown ? session.waStatus : status.toLowerCase(),
+			phoneNumber,
+		};
 	}
 
 	static listSessions() {
 		return Array.from(WhatsappService.sessions.entries()).map(([id, session]) => ({
 			id,
-			status: WhatsappService.getSessionStatus(session),
+			...WhatsappService.getSessionStatus(session),
 		}));
 	}
 
