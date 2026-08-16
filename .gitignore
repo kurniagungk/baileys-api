@@ -8,3 +8,4 @@ prisma/migrations/
 logs/
 tsconfig.tsbuildinfo
 .DS_Store
+.zcode/plans/

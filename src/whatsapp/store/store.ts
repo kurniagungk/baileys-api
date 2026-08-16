@@ -6,12 +6,14 @@ export class Store {
 	private readonly messageHandler;
 	private readonly contactHandler;
 	private readonly groupMetadataHandler;
+	private readonly labelHandler;
 
 	constructor(sessionId: string, event: BaileysEventEmitter) {
 		this.chatHandler = handlers.chatHandler(sessionId, event);
 		this.messageHandler = handlers.messageHandler(sessionId, event);
 		this.contactHandler = handlers.contactHandler(sessionId, event);
 		this.groupMetadataHandler = handlers.groupMetadataHandler(sessionId, event);
+		this.labelHandler = handlers.labelHandler(sessionId, event);
 		this.listen();
 	}
 
@@ -20,6 +22,7 @@ export class Store {
 		this.messageHandler.listen();
 		this.contactHandler.listen();
 		this.groupMetadataHandler.listen();
+		this.labelHandler.listen();
 	}
 
 	public unlisten() {
@@ -27,5 +30,6 @@ export class Store {
 		this.messageHandler.unlisten();
 		this.contactHandler.unlisten();
 		this.groupMetadataHandler.unlisten();
+		this.labelHandler.unlisten();
 	}
 }
