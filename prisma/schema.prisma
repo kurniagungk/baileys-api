@@ -170,12 +170,27 @@ model Message {
 }
 
 model Session {
-  pkId      Int    @id @default(autoincrement())
-  sessionId String @db.VarChar(128)
-  id        String @db.VarChar(255)
-  data      String @db.LongText
-  webhookUrl String? @db.VarChar(255) 
+  pkId      Int     @id @default(autoincrement())
+  sessionId String  @db.VarChar(128)
+  id        String  @db.VarChar(255)
+  data      String  @db.LongText
+  webhookUrl String? @db.VarChar(255)
 
   @@unique([sessionId, id], name: "sessionId_id", map: "unique_id_per_session_id_4")
+  @@index([sessionId])
+}
+
+model Label {
+  pkId         Int      @id @default(autoincrement())
+  sessionId    String   @db.VarChar(128)
+  labelId      String   @db.VarChar(64)
+  name         String   @db.VarChar(255)
+  color        Int
+  predefinedId String?  @db.VarChar(64)
+  deleted      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([sessionId, labelId])
   @@index([sessionId])
 }

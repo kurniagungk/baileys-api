@@ -27,5 +27,11 @@ router.post(
 	sessionValidator,
 	chat.presence,
 );
+router.post(
+	"/:jid/read",
+	body("messageIds").isArray().optional(),
+	sessionValidator,
+	chat.read,
+);
 
 export default router;

@@ -104,3 +104,62 @@ export const find: RequestHandler = async (req, res) => {
 };
 
 export const presence: RequestHandler = presenceHandler();
+
+const READ_LIMIT = 500;
+
+export const read: RequestHandler = async (req, res) => {
+	try {
+		const { sessionId, jid } = req.params;
+		const session = WhatsappService.getSession(sessionId)!;
+		const { messageIds } = req.body as { messageIds?: string[] };
+
+		// jika messageIds diberikan, tandai pesan tersebut; jika tidak,
+		// tandai semua pesan masuk yang belum dibaca di chat ini
+		const where = Array.isArray(messageIds) && messageIds.length > 0
+			? { sessionId, remoteJid: jid, id: { in: messageIds } }
+			: {
+					sessionId,
+					remoteJid: jid,
+					key: { path: ["fromMe"], equals: false },
+				};
+
+		const messages = await prisma.message.findMany({
+			where,
+			select: { key: true, participant: true },
+			orderBy: { pkId: "desc" },
+			take: READ_LIMIT,
+		});
+
+		if (messages.length === 0) {
+			return res.status(200).json({ message: "No unread messages", count: 0 });
+		}
+
+		const keys = messages
+			.map((m) => {
+				const key = m.key as
+					| { remoteJid: string; id: string; fromMe: boolean }
+					| undefined;
+				if (!key?.id) return null;
+				return {
+					remoteJid: key.remoteJid,
+					id: key.id,
+					fromMe: key.fromMe,
+					participant: m.participant ?? undefined,
+				};
+			})
+			.filter((k): k is NonNullable<typeof k> => k !== null);
+
+		await session.readMessages(keys);
+		// reset counter hanya jika semua pesan masuk tertangani;
+		// jika terpotong limit, biarkan unreadCount mencerminkan sisa pesan
+		if (messages.length < READ_LIMIT) {
+			await resetUnreadCount(sessionId, jid);
+		}
+
+		res.status(200).json({ message: "Messages marked as read", count: keys.length });
+	} catch (e) {
+		const message = "An error occured during marking messages as read";
+		logger.error(e, message);
+		res.status(500).json({ error: message });
+	}
+};
